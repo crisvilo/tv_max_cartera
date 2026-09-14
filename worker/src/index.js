@@ -105,7 +105,7 @@ export default {
           service: 'Grupo TV MAX API',
           status: 'online',
           databaseConfigured: Boolean(env.DATABASE_URL),
-          environmentKeys: Objec.keys(env)
+          environmentKeys: Object.keys(env)
         });
 
       }
