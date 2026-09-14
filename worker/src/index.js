@@ -109,7 +109,29 @@ export default {
         });
 
       }
+      if (url.pathname === '/api/db-test') {
 
+  if (!env.DATABASE_URL) {
+    return json({
+      ok: false,
+      error: 'DATABASE_URL no configurada'
+    }, 500);
+  }
+
+  const sql = neon(env.DATABASE_URL);
+
+  const result = await sql`
+    SELECT NOW() AS fecha,
+           current_database() AS base_datos
+  `;
+
+  return json({
+    ok: true,
+    database: 'Neon conectado correctamente',
+    result
+  });
+
+}
 
       /*
        =========================
