@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestión de Cartera</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="icon" href="img/favicon.png" type="image/x-icon">
+</head>
+<body>
+<header class="navbar">
+  <div class="brand-area">
+    <button id="btn-menu" class="menu-toggle hidden" type="button" aria-label="Abrir menú">☰</button>
+    <div><h1>Gestión de Cartera</h1><p class="navbar-subtitle">Llamadas de cobro y seguimiento de clientes</p></div>
+  </div>
+  <div id="session-area" class="session-area hidden">
+    <div class="user-chip"><span class="user-avatar" id="user-avatar">A</span><div><strong id="user-name">Usuario</strong><small id="user-role">Asesor</small></div></div>
+    <button id="btn-logout" class="btn-logout" type="button">Cerrar sesión</button>
+  </div>
+</header>
+
+<div id="app-shell" class="app-shell">
+  <aside id="sidebar" class="sidebar hidden">
+    <div class="sidebar-head"><div class="sidebar-logo">✦</div><div><strong id="sidebar-user-name">Usuario</strong><small id="sidebar-user-role">Asesor</small></div><button id="btn-close-menu" class="sidebar-close" type="button">×</button></div>
+    <nav id="sidebar-nav" class="sidebar-nav"></nav>
+  </aside>
+  <main class="container">
+
+    <section id="auth-view" class="auth-layout">
+      <div class="auth-card card">
+        <div class="auth-brand"><span class="auth-icon">✦</span><div><span class="eyebrow">SISTEMA DE CARTERA</span><h2>Iniciar sesión</h2></div></div>
+        <p class="auth-description">Ingresa con tu cuenta de asesor o administrador de Cartera.</p>
+        <form id="login-form" class="auth-form">
+          <div class="form-group"><label for="login-email">Correo electrónico <span>*</span></label><input id="login-email" type="email" autocomplete="email" required placeholder="correo@ejemplo.com"></div>
+          <div class="form-group"><label for="login-password">Contraseña <span>*</span></label><input id="login-password" type="password" autocomplete="current-password" required placeholder="••••••••"></div>
+          <button class="btn-primary btn-full" type="submit">Ingresar</button>
+        </form>
+        <div class="auth-divider"><span>¿Eres asesor?</span></div>
+        <button id="btn-show-register" class="btn-secondary btn-full" type="button">Crear cuenta de asesor</button>
+        <p class="auth-note">El administrador no se registra desde esta pantalla. Su cuenta se configura directamente en Supabase.</p>
+      </div>
+    </section>
+
+    <section id="register-view" class="auth-layout hidden">
+      <div class="auth-card card auth-card-wide">
+        <div class="auth-brand"><span class="auth-icon">+</span><div><span class="eyebrow">NUEVO ASESOR</span><h2>Registro de asesor de Cartera</h2></div></div>
+        <p class="auth-description">Registra tus datos como asesor de Cartera. Las zonas se seleccionan en cada llamada.</p>
+        <form id="register-form" class="register-grid">
+          <div class="form-group"><label for="reg-nombre">Nombre <span>*</span></label><input id="reg-nombre" type="text" required></div>
+          <div class="form-group"><label for="reg-apellido">Apellido <span>*</span></label><input id="reg-apellido" type="text" required></div>
+          <div class="form-group"><label for="reg-documento">Documento</label><input id="reg-documento" type="text"></div>
+          <div class="form-group"><label for="reg-telefono">Teléfono</label><input id="reg-telefono" type="tel"></div>
+          <div class="form-group"><label for="reg-email">Correo electrónico <span>*</span></label><input id="reg-email" type="email" required></div>
+          <div class="form-group"><label for="reg-password">Contraseña <span>*</span></label><input id="reg-password" type="password" minlength="6" required></div>
+          <div class="form-group"><label for="reg-password-confirm">Confirmar contraseña <span>*</span></label><input id="reg-password-confirm" type="password" minlength="6" required></div>
+          <div class="form-actions form-actions-wide"><button id="btn-back-login" type="button" class="btn-secondary">Volver al inicio</button><button type="submit" class="btn-primary">Registrar asesor</button></div>
+        </form>
+      </div>
+    </section>
+
+    <section id="vista-asesor" class="view hidden">
+      <div class="page-heading"><div><span class="eyebrow">DASHBOARD ASESOR</span><h2>Mi resumen de cartera</h2><p id="asesor-welcome">Consulta tus llamadas del mes.</p></div></div>
+      <div class="stats-grid">
+        <div class="card stat-card"><div class="stat-icon">#</div><div><h3>Llamadas realizadas</h3><p id="asesor-total-count">0</p></div></div>
+        <div class="card stat-card"><div class="stat-icon">✓</div><div><h3>Contestadas</h3><p id="asesor-contestadas-count">0</p></div></div>
+        <div class="card stat-card"><div class="stat-icon">✕</div><div><h3>No contestadas</h3><p id="asesor-nocontestadas-count">0</p></div></div>
+        <div class="card stat-card"><div class="stat-icon">$</div><div><h3>Pagos confirmados</h3><p id="asesor-pagos-count">0</p></div></div>
+        <div class="card stat-card"><div class="stat-icon">◷</div><div><h3>Compromisos de pago</h3><p id="asesor-compromisos-count">0</p></div></div>
+        <div class="card stat-card"><div class="stat-icon">◎</div><div><h3>Meta asignada</h3><p id="asesor-meta-count">0</p></div></div>
+        <div class="card stat-card"><div class="stat-icon">%</div><div><h3>Avance de la meta</h3><p id="asesor-meta-pct">0%</p><div class="mini-progress"><span id="asesor-meta-bar" style="width:0%"></span></div></div></div>
+      </div>
+
+      <div class="card form-card" id="asesor-form-section">
+        <div class="card-heading"><div><span class="section-kicker">NUEVA LLAMADA</span><h3>Registrar llamada de cartera</h3><p class="muted">¿Quieres registrar la encuesta de satisfacción de este cliente? Ve a <strong>Encuestas</strong> en el menú.</p></div><span id="asesor-zone-badge" class="zone-badge">Zona: —</span></div>
+        <form id="call-form" class="sale-grid">
+          <div class="form-group"><label for="cliente">Cliente <span>*</span></label><input type="text" id="cliente" required placeholder="Nombre o código de cliente"></div>
+          <div class="form-group"><label for="tipoLlamada">Llamada <span>*</span></label><select id="tipoLlamada" required><option value="">Seleccione...</option><option value="Contestada">Contestada</option><option value="No contestada">No contestada</option><option value="Equivocada">Equivocada</option></select></div>
+          <div class="form-group"><label for="zona">Zona de la llamada <span>*</span></label><select id="zona" required><option value="">Seleccione la zona...</option><option value="San Marcos">San Marcos</option><option value="Caucasia">Caucasia</option><option value="Caucasia Subsidiada">Caucasia Subsidiada</option><option value="Montelíbano">Montelíbano</option><option value="La Apartada">La Apartada</option><option value="Buenavista">Buenavista</option></select></div>
+          <div class="form-group form-group-wide"><label for="tipoGestion">Tipo de llamada (gestión)</label><select id="tipoGestion"><option value="">Sin especificar</option><option>Gestión reporte a Data Crédito y abogados</option><option>Gestión lista de suspensión</option><option>Gestión recuperación de equipo</option><option>Gestión ofreciendo servicio de la empresa</option><option>Gestión actualización de información</option></select></div>
+                    <div class="form-group"><label for="fechaLlamada">Fecha de la llamada <span>*</span></label><input type="date" id="fechaLlamada" required></div>
+
+          <div class="form-group"><label for="whatsappEnviado">WhatsApp</label><select id="whatsappEnviado"><option value="false">No se contactó</option><option value="true">Se envió mensaje</option></select></div>
+          <div class="form-group form-group-wide hidden" id="whatsappMensajeGroup"><label for="whatsappMensaje">Mensaje enviado</label><input type="text" id="whatsappMensaje" placeholder="Ej. Recordatorio de pago enviado"></div>
+          <div class="form-group form-group-wide hidden" id="whatsappRespuestaGroup"><label for="whatsappRespuesta">Respuesta del cliente</label><input type="text" id="whatsappRespuesta" placeholder="Ej. Confirmó que pagará el viernes"></div>
+
+          <div class="form-group"><label for="compromisoPago">Compromiso de pago</label><select id="compromisoPago"><option value="false">No</option><option value="true">Sí</option></select></div>
+          <div class="form-group hidden" id="fechaCompromisoGroup"><label for="fechaCompromiso">Fecha del compromiso</label><input type="date" id="fechaCompromiso"></div>
+          <div class="form-group"><label for="pago">Pago</label><select id="pago"><option value="false">No</option><option value="true">Sí</option></select></div>
+
+          <div class="form-group form-group-wide"><label for="observaciones">Observaciones</label><input type="text" id="observaciones" placeholder="Notas adicionales de la llamada"></div>
+
+          <div class="form-actions form-actions-wide"><button type="reset" class="btn-secondary">Limpiar</button><button type="submit" class="btn-primary">Registrar llamada</button></div>
+        </form>
+      </div>
+
+      <div class="card table-card"><div class="card-heading table-heading"><div><span class="section-kicker">HISTORIAL</span><h3>Mis llamadas</h3></div><div class="table-tools"><input id="filtroAsesor" type="search" placeholder="Buscar cliente, zona u observación..."><button id="btn-asesor-report" class="btn-secondary" type="button">👁 Ver mi reporte</button><button id="btn-asesor-print" class="btn-secondary" type="button">🖨 Imprimir</button><button id="btn-asesor-pdf" class="btn-primary" type="button">📄 Descargar PDF</button></div></div><div class="table-wrapper"><table><thead><tr><th>ID</th><th>Cliente</th><th>Llamada</th><th>Tipo de llamada</th><th>Zona</th><th>WhatsApp</th><th>Compromiso</th><th>Pago</th><th>Fecha</th></tr></thead><tbody id="tabla-asesor"></tbody></table></div></div>
+
+      <div class="card table-card"><div class="card-heading"><div><span class="section-kicker">SEGUIMIENTO</span><h3>Veces que he contactado a cada cliente este mes</h3></div></div><div class="table-wrapper"><table><thead><tr><th>Cliente</th><th>Llamadas</th><th>Contestadas</th><th>No contestadas</th><th>Compromisos</th><th>Pagos</th></tr></thead><tbody id="tabla-seguimiento-asesor"></tbody></table></div></div>
+    </section>
+
+    <section id="admin-dashboard" class="view hidden">
+      <div class="page-heading"><div><span class="eyebrow">ADMINISTRACIÓN</span><h2>Dashboard general de cartera</h2><p>Visión global de llamadas, pagos y compromisos.</p></div></div>
+      <div class="stats-grid admin-stats">
+        <div class="card stat-card"><div class="stat-icon">#</div><div><h3>Llamadas</h3><p id="dash-total">0</p></div></div>
+        <div class="card stat-card"><div class="stat-icon">✓</div><div><h3>Contestadas</h3><p id="dash-contestadas">0</p></div></div>
+        <div class="card stat-card"><div class="stat-icon">✕</div><div><h3>No contestadas</h3><p id="dash-nocontestadas">0</p></div></div>
+        <div class="card stat-card"><div class="stat-icon">◷</div><div><h3>Compromisos</h3><p id="dash-compromisos">0</p></div></div>
+        <div class="card stat-card"><div class="stat-icon">$</div><div><h3>Pagos</h3><p id="dash-pagos">0</p></div></div>
+      </div>
+      <div class="card dashboard-card admin-goal-card"><span class="section-kicker">META DEL ADMINISTRADOR</span><div class="goal-admin-head"><div><h3>Meta mensual del equipo</h3><p>La meta se calcula automáticamente sumando las metas de todos los asesores activos.</p></div><span id="dash-admin-goal-month" class="result-count">Mes actual</span></div><div class="admin-goal-numbers"><div><span>Realizadas</span><strong id="dash-admin-goal-done">0</strong></div><div><span>Meta</span><strong id="dash-admin-goal">0</strong></div><div><span>Cumplimiento</span><strong id="dash-admin-goal-pct">0%</strong></div></div><div class="goal-track admin-goal-track"><i id="dash-admin-goal-bar" style="width:0%"></i></div></div><div class="card dashboard-card"><span class="section-kicker">CUMPLIMIENTO</span><h3>Meta de llamadas por asesor</h3><div id="dash-goals-list" class="goal-chart"></div></div><div class="card dashboard-card"><span class="section-kicker">TIPO DE LLAMADA</span><h3>Distribución mensual</h3><div id="dash-services-list" class="mini-bars"></div></div><div class="card dashboard-card"><span class="section-kicker">GESTIÓN</span><h3>Tipo de gestión (mensual)</h3><div id="dash-gestion-list" class="mini-bars"></div></div></div>
+    </section>
+
+    <section id="vista-admin" class="view hidden">
+      <div class="page-heading"><div><span class="eyebrow">LLAMADAS</span><h2>Gestión de cartera</h2><p>Consulta, filtra y descarga el detalle de las llamadas registradas.</p></div></div>
+      <div class="card filters-card"><div class="card-heading"><div><span class="section-kicker">REPORTES</span><h3>Filtros de consulta</h3></div><div class="filter-actions"><button id="btn-clear-filters" class="btn-secondary" type="button">Limpiar filtros</button><button id="btn-preview-report" class="btn-secondary" type="button">👁 Vista previa</button><button id="btn-print-report" class="btn-primary" type="button">🖨 Imprimir</button><button id="btn-pdf-report" class="btn-primary" type="button">📄 Descargar PDF</button><button id="btn-excel-report" class="btn-secondary" type="button">📊 Descargar Excel</button></div></div><div class="filters-grid">
+        <div class="form-group"><label for="filtroAdminTexto">Buscar</label><input id="filtroAdminTexto" type="search" placeholder="Cliente, zona, observaciones..."></div>
+        <div class="form-group"><label for="ms-asesores-toggle">Asesores <small class="muted">(elige varios para comparar)</small></label>
+          <div class="multiselect" id="ms-asesores">
+            <button type="button" class="multiselect-toggle" id="ms-asesores-toggle">Todos los asesores</button>
+            <div class="multiselect-panel hidden" id="ms-asesores-panel">
+              <div class="multiselect-actions"><button type="button" id="ms-asesores-all">Todos</button><button type="button" id="ms-asesores-none">Ninguno</button></div>
+              <div id="ms-asesores-list" class="multiselect-list"></div>
+            </div>
+          </div>
+        </div>
+        <div class="form-group"><label for="filtroLlamadaAdmin">Llamada</label><select id="filtroLlamadaAdmin"><option value="">Todas</option><option value="Contestada">Contestadas</option><option value="No contestada">No contestadas</option><option value="Equivocada">Equivocadas</option></select></div>
+        <div class="form-group"><label for="filtroTipoGestionAdmin">Tipo de llamada</label><select id="filtroTipoGestionAdmin"><option value="">Todos</option></select></div>
+        <div class="form-group"><label for="filtroCompromisoAdmin">Compromiso</label><select id="filtroCompromisoAdmin"><option value="">Todos</option><option value="true">Con compromiso</option><option value="false">Sin compromiso</option></select></div>
+        <div class="form-group"><label for="filtroPagoAdmin">Pago</label><select id="filtroPagoAdmin"><option value="">Todos</option><option value="true">Pagó</option><option value="false">No pagó</option></select></div>
+        <div class="form-group"><label for="filtroZonaAdmin">Zona</label><select id="filtroZonaAdmin"><option value="">Todas las zonas</option><option>San Marcos</option><option>Caucasia</option><option>Montelíbano</option><option>La Apartada</option><option>Buenavista</option></select></div>
+        <div class="form-group"><label for="filtroDesdeAdmin">Fecha desde</label><input id="filtroDesdeAdmin" type="date"></div><div class="form-group"><label for="filtroHastaAdmin">Fecha hasta</label><input id="filtroHastaAdmin" type="date"></div>
+      </div></div>
+      <div class="card table-card"><div class="card-heading table-heading"><div><span class="section-kicker">RESUMEN</span><h3>Llamadas por asesor</h3><p class="muted">Una sola fila por asesor para consultar rápidamente contestadas, no contestadas y WhatsApp.</p></div><div class="table-tools"><span id="admin-result-count" class="result-count">0 resultados</span><button id="btn-preview-advisor-summary" class="btn-secondary" type="button">👁 Vista previa</button><button id="btn-print-advisor-summary" class="btn-primary" type="button">🖨 Imprimir</button><button id="btn-pdf-advisor-summary" class="btn-primary" type="button">📄 PDF</button><button id="btn-excel-advisor-summary" class="btn-secondary" type="button">📊 Excel</button></div></div><div class="table-wrapper"><table class="advisor-call-summary-table"><thead><tr><th>Asesor</th><th>Total</th><th>Contestadas</th><th>No contestadas</th><th>WhatsApp</th><th>Compromisos</th><th>Pagos</th><th>Zonas</th></tr></thead><tbody id="tabla-admin"></tbody></table></div></div>
+
+       <div class="card table-card"><div class="card-heading table-heading"><div><span class="section-kicker">DETALLE</span><h3>Detalle de llamadas registradas</h3></div></div><div class="table-wrapper"><table class="admin-operation-table"><thead><tr><th>ID</th><th>Asesor</th><th>Cliente</th><th>Llamada</th><th>Tipo de llamada</th><th>Zona</th><th>WhatsApp</th><th>Compromiso</th><th>Pago</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody id="tabla-admin-detail"></tbody></table></div></div>
+
+      <div class="card table-card"><div class="card-heading"><div><span class="section-kicker">SEGUIMIENTO</span><h3>Veces que se ha contactado a cada cliente (según filtros)</h3></div></div><div class="table-wrapper"><table><thead><tr><th>Cliente</th><th>Llamadas</th><th>Contestadas</th><th>No contestadas</th><th>Compromisos</th><th>Pagos</th><th>Asesor(es)</th></tr></thead><tbody id="tabla-seguimiento-admin"></tbody></table></div></div>
+    </section>
+
+    <section id="vista-encuestas-hub" class="view hidden">
+      <div class="page-heading"><div><span class="eyebrow">ENCUESTAS</span><h2>Centro de encuestas</h2><p>Elige qué encuesta quieres registrar o consultar. Cada una se abre en su propia pantalla.</p></div></div>
+      <div class="survey-hub-grid">
+        <div class="card survey-hub-card">
+          <div class="survey-hub-icon">☑</div>
+          <h3>Encuesta de satisfacción</h3>
+          <p>7 preguntas sobre el servicio, la atención técnica y administrativa. El asesor la diligencia junto con una llamada; el administrador puede registrarla directamente para un cliente.</p>
+          <div class="survey-hub-actions">
+            <button type="button" class="btn-primary" data-hub-open="vista-encuestas" data-hub-mode="form">Diligenciar</button>
+            <button type="button" class="btn-secondary" data-hub-open="vista-encuestas" data-hub-mode="report">Ver reporte</button>
+          </div>
+        </div>
+        <div class="card survey-hub-card">
+          <div class="survey-hub-icon">◷</div>
+          <h3>Encuesta de seguimiento</h3>
+          <p>Cómo se enteró del servicio, fechas de pago, contrato, atención del asesor, redes sociales y medios de pago.</p>
+          <div class="survey-hub-actions">
+            <button type="button" class="btn-primary" data-hub-open="vista-encuesta-seguimiento" data-hub-mode="form">Diligenciar</button>
+            <button type="button" class="btn-secondary" data-hub-open="vista-encuesta-seguimiento" data-hub-mode="report">Ver reporte</button>
+          </div>
+        </div>
+        <div class="card survey-hub-card">
+          <div class="survey-hub-icon">✕</div>
+          <h3>Encuesta de servicio</h3>
+          <p>Se registra cuando un cliente retira un servicio: motivo del retiro y si estaría interesado en retomarlo.</p>
+          <div class="survey-hub-actions">
+            <button type="button" class="btn-primary" data-hub-open="vista-encuesta-servicio" data-hub-mode="form">Diligenciar</button>
+            <button type="button" class="btn-secondary" data-hub-open="vista-encuesta-servicio" data-hub-mode="report">Ver reporte</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="vista-encuestas" class="view hidden">
+      <div class="page-heading"><div><span class="eyebrow">ENCUESTA DE SATISFACCIÓN</span><h2>Encuesta de satisfacción</h2><p>Registra y consulta las encuestas de satisfacción realizadas por los asesores y por el administrador.</p></div><button type="button" class="btn-secondary btn-back-hub" data-hub-back>← Volver a Encuestas</button></div>
+      <div class="survey-panel" data-panel="form">
+      <div class="card form-card admin-survey-card">
+        <div class="card-heading"><div><span class="section-kicker">ENCUESTA DIRECTA</span><h3>Diligenciar encuesta</h3><p class="muted">Registra la encuesta directamente para un cliente o usuario, sin depender de una llamada. Los campos de la encuesta pueden quedar vacíos.</p></div></div>
+        <form id="admin-survey-form" class="encuesta-grid">
+          <div class="form-group encuesta-question-wide"><label for="adminEncCodigoUsuario">Cliente o usuario encuestado</label><input id="adminEncCodigoUsuario" type="text" placeholder="Nombre del cliente o usuario"><small class="survey-selected-info">Escriba directamente el nombre del cliente o usuario. No es necesario seleccionar una llamada.</small></div>
+          
+          <div class="encuesta-question"><span class="question-number">02</span><div class="form-group"><label for="adminEncServicio">¿Cómo califica el servicio prestado?</label><select id="adminEncServicio"><option value="">Sin respuesta</option><option>EXCELENTE</option><option>BUENO</option><option>REGULAR</option><option>MALO</option><option>MUY MALO</option></select></div></div>
+          <div class="encuesta-question"><span class="question-number">03</span><div class="form-group"><label for="adminEncTecnica">¿Cómo califica la atención del área técnica?</label><select id="adminEncTecnica"><option value="">Sin respuesta</option><option>EXCELENTE</option><option>BUENO</option><option>REGULAR</option><option>MALO</option><option>MUY MALO</option></select></div></div>
+          <div class="encuesta-question"><span class="question-number">04</span><div class="form-group"><label for="adminEncAdministrativa">¿Cómo califica la atención del área administrativa?</label><select id="adminEncAdministrativa"><option value="">Sin respuesta</option><option>EXCELENTE</option><option>BUENO</option><option>REGULAR</option><option>MALO</option><option>MUY MALO</option></select></div></div>
+          <div class="encuesta-question"><span class="question-number">05</span><div class="form-group"><label for="adminEncAverias">¿Cómo califica la agilidad frente a daños o averías?</label><select id="adminEncAverias"><option value="">Sin respuesta</option><option>AGIL</option><option>DEMORADOS</option><option>MUY DEMORADOS</option><option>NI DEMORADOS NI AGIL</option></select></div></div>
+          <div class="encuesta-question"><span class="question-number">06</span><div class="form-group"><label for="adminEncRecomendaria">¿Recomendaría nuestros servicios?</label><select id="adminEncRecomendaria"><option value="">Sin respuesta</option><option>SI</option><option>NO</option></select></div></div>
+          <div class="encuesta-question encuesta-question-wide"><span class="question-number">07</span><div class="form-group"><label for="adminEncRecomendacion">¿Tiene alguna recomendación o felicitación?</label><textarea id="adminEncRecomendacion" rows="3"></textarea></div></div>
+          <div class="encuesta-observaciones encuesta-question-wide"><div class="form-group"><label for="adminEncServicioObs">Observación adicional — servicio</label><textarea id="adminEncServicioObs" rows="2"></textarea></div><div class="form-group"><label for="adminEncTecnicaObs">Observación adicional — técnica</label><textarea id="adminEncTecnicaObs" rows="2"></textarea></div><div class="form-group"><label for="adminEncAdministrativaObs">Observación adicional — administrativa</label><textarea id="adminEncAdministrativaObs" rows="2"></textarea></div></div>
+          <div class="form-actions form-actions-wide"><button type="reset" class="btn-secondary">Limpiar</button><button type="submit" class="btn-primary">Guardar encuesta</button></div>
+        </form>
+      </div>
+      </div>
+      <div class="survey-panel hidden" data-panel="report">
+      <div class="card filters-card">
+        <div class="card-heading"><div><span class="section-kicker">FILTROS</span><h3>Consultar encuestas</h3></div><div class="filter-actions"><button id="btn-clear-survey-filters" class="btn-secondary" type="button">Limpiar</button><button id="btn-preview-survey-report" class="btn-secondary" type="button">👁 Vista previa</button><button id="btn-print-survey-report" class="btn-primary" type="button">🖨 Imprimir</button><button id="btn-pdf-survey-report" class="btn-primary" type="button">📄 Descargar PDF</button><button id="btn-excel-survey-report" class="btn-secondary" type="button">📊 Excel</button></div></div>
+        <div class="filters-grid survey-filters">
+          <div class="form-group admin-only"><label for="filtroEncuestaAsesor">Asesor</label><select id="filtroEncuestaAsesor"><option value="">Todos los asesores</option></select></div>
+          <div class="form-group"><label for="filtroEncuestaDesde">Fecha desde</label><input id="filtroEncuestaDesde" type="date"></div>
+          <div class="form-group"><label for="filtroEncuestaHasta">Fecha hasta</label><input id="filtroEncuestaHasta" type="date"></div>
+          <div class="form-group"><label for="filtroEncuestaTexto">Buscar</label><input id="filtroEncuestaTexto" type="search" placeholder="Usuario, asesor o respuesta..."></div>
+        </div>
+      </div>
+      <div class="card table-card">
+        <div class="card-heading table-heading"><div><span class="section-kicker">RESULTADOS</span><h3>Respuestas por asesor</h3></div><span id="survey-result-count" class="result-count">0 encuestas</span></div>
+        <div class="table-wrapper survey-table-wrapper"><table class="survey-admin-table"><thead><tr><th>Fecha</th><th>Asesor</th><th>Cliente</th><th>Zona</th><th>Llamada</th><th>01. Cliente / usuario encuestado</th><th>02. Servicio</th><th>03. Técnica</th><th>04. Administrativa</th><th>05. Averías</th><th>06. Recomendaría</th><th>07. Recomendación / felicitación</th><th>Obs. servicio</th><th>Obs. técnica</th><th>Obs. administrativa</th></tr></thead><tbody id="tabla-encuestas"></tbody></table></div>
+      </div>
+      </div>
+    </section>
+
+    <section id="vista-encuesta-seguimiento" class="view hidden">
+      <div class="page-heading"><div><span class="eyebrow">ENCUESTAS</span><h2>Encuesta de seguimiento</h2><p>Registro y reporte independiente de seguimiento.</p></div><button type="button" class="btn-secondary btn-back-hub" data-hub-back>← Volver a Encuestas</button></div>
+      <div class="survey-panel" data-panel="form">
+      <div class="card survey-seg-form"><form id="seguimiento-form" class="register-grid">
+        <div class="form-group form-group-wide"><label>Código o nombre de usuario *</label><input id="segUsuario" required></div>
+        <div class="form-group form-group-wide"><label>1. ¿Cómo se enteró de los servicios que Grupo TV Max ofrece?</label><textarea id="segEntero" rows="2"></textarea></div>
+        <div class="form-group"><label>2. ¿Le informaron sobre las fechas oportunas de pago?</label><select id="segFechas"><option>SI</option><option>NO</option></select></div>
+        <div class="form-group"><label>3. ¿Por qué medio recibió su contrato?</label><select id="segContrato"><option>CORREO</option><option>FISICO</option><option>WHATSAPP</option><option>NO RECIBIO</option><option>FISICO Y CORREO</option></select></div>
+        <div class="form-group"><label>4. ¿Cómo califica la atención brindada por nuestro asesor?</label><select id="segAtencion"><option>EXCELENTE</option><option>BUENO</option><option>REGULAR</option><option>MALO</option></select></div>
+        <div class="form-group"><label>5. ¿Lo invitaron a seguirnos en nuestras redes sociales?</label><select id="segRedes"><option>SI</option><option>NO</option></select></div>
+        <div class="form-group"><label>6. ¿El área técnica le cobró algún valor adicional al momento de la instalación?</label><select id="segTecnica"><option>SI</option><option>NO</option></select></div>
+        <div class="form-group"><label>7. ¿Le informaron sobre nuestros medios de pago?</label><select id="segMedios"><option>SI</option><option>NO</option></select></div>
+        <div class="form-actions form-actions-wide"><button type="reset" class="btn-secondary">Limpiar</button><button type="submit" class="btn-primary">Guardar encuesta</button></div>
+      </form></div>
+      </div>
+      <div class="survey-panel hidden" data-panel="report">
+      <div class="card table-card survey-seg-report" id="seg-report-area"><div class="report-filters"><div class="form-group"><label>Desde</label><input type="date" id="seg-filter-from"></div><div class="form-group"><label>Hasta</label><input type="date" id="seg-filter-to"></div><div class="form-group"><label>Usuario</label><input type="text" id="seg-filter-user" placeholder="Código o nombre"></div><div class="form-group"><label>Atención</label><select id="seg-filter-att"><option value="">Todas</option><option>EXCELENTE</option><option>BUENO</option><option>REGULAR</option><option>MALO</option></select></div><div class="form-group"><label>Fechas de pago</label><select id="seg-filter-pay"><option value="">Todos</option><option>SI</option><option>NO</option></select></div><button id="seg-filter-clear" class="btn-secondary" type="button">Limpiar filtros</button></div><div class="card-heading"><div><span class="section-kicker">REPORTE</span><h3>Encuestas de seguimiento</h3></div><div class="table-tools"><button id="btn-seg-preview" class="btn-secondary" type="button">👁 Vista previa</button><button id="btn-seg-pdf" class="btn-primary" type="button">📄 Descargar PDF</button><button id="btn-seg-excel" class="btn-secondary" type="button">📊 Descargar Excel</button></div><div class="table-wrapper"><table><thead><tr><th>Usuario</th><th>¿Cómo se enteró?</th><th>Fechas de pago</th><th>Contrato</th><th>Atención</th><th>Redes</th><th>Cobro técnico</th><th>Medios de pago</th><th>Fecha</th></tr></thead><tbody id="tabla-seguimiento-encuesta"></tbody></table></div></div>
+      </div>
+    </section>
+
+    <section id="vista-encuesta-servicio" class="view hidden">
+      <div class="page-heading"><div><span class="eyebrow">ENCUESTAS</span><h2>Encuesta de servicio</h2><p>Registro y reporte independiente de retiros de servicio.</p></div><button type="button" class="btn-secondary btn-back-hub" data-hub-back>← Volver a Encuestas</button></div>
+      <div class="survey-panel" data-panel="form">
+      <div class="card survey-srv-form"><form id="servicio-form" class="register-grid">
+        <div class="form-group form-group-wide"><label>Código o nombre de usuario *</label><input id="srvUsuario" required></div>
+        <div class="form-group"><label>1. Servicio que retira</label><select id="srvServicio"><option>TELEVISION</option><option>INTERNET</option><option>COMBO</option></select></div>
+        <div class="form-group form-group-wide"><label>2. Motivo del retiro</label><textarea id="srvMotivo" rows="3"></textarea></div>
+        <div class="form-group"><label>3. ¿Está interesado en retomar el servicio?</label><select id="srvRetomar"><option>SI</option><option>NO</option></select></div>
+        <div class="form-group form-group-wide"><label>Observaciones</label><textarea id="srvObservaciones" rows="3"></textarea></div>
+        <div class="form-actions form-actions-wide"><button type="reset" class="btn-secondary">Limpiar</button><button type="submit" class="btn-primary">Guardar encuesta</button></div>
+      </form></div>
+      </div>
+      <div class="survey-panel hidden" data-panel="report">
+      <div class="card table-card survey-srv-report" id="srv-report-area"><div class="report-filters"><div class="form-group"><label>Desde</label><input type="date" id="srv-filter-from"></div><div class="form-group"><label>Hasta</label><input type="date" id="srv-filter-to"></div><div class="form-group"><label>Usuario</label><input type="text" id="srv-filter-user" placeholder="Código o nombre"></div><div class="form-group"><label>Servicio</label><select id="srv-filter-service"><option value="">Todos</option><option>TELEVISION</option><option>INTERNET</option><option>COMBO</option></select></div><div class="form-group"><label>Retomaría</label><select id="srv-filter-retomar"><option value="">Todos</option><option>SI</option><option>NO</option></select></div><button id="srv-filter-clear" class="btn-secondary" type="button">Limpiar filtros</button></div><div class="card-heading"><div><span class="section-kicker">REPORTE</span><h3>Encuestas de servicio</h3></div><div class="table-tools"><button id="btn-srv-preview" class="btn-secondary" type="button">👁 Vista previa</button><button id="btn-srv-pdf" class="btn-primary" type="button">📄 Descargar PDF</button><button id="btn-srv-excel" class="btn-secondary" type="button">📊 Descargar Excel</button></div><div class="table-wrapper"><table><thead><tr><th>Usuario</th><th>Servicio</th><th>Motivo retiro</th><th>Retomaría</th><th>Observaciones</th><th>Fecha</th></tr></thead><tbody id="tabla-servicio-encuesta"></tbody></table></div></div>
+      </div>
+    </section>
+
+    <section id="vista-usuarios" class="view hidden">
+      <div class="page-heading"><div><span class="eyebrow">ADMINISTRACIÓN</span><h2>Asesores</h2><p>Crea, edita, actualiza, inhabilita o elimina asesores de Cartera y define su meta de llamadas. Los asesores pueden registrar llamadas en cualquier zona.</p></div></div>
+      <div class="survey-panel" data-panel="form">
+      <div class="card form-card"><div class="card-heading"><div><span class="section-kicker">NUEVO ASESOR</span><h3>Crear asesor</h3></div></div><form id="admin-user-form" class="register-grid"><input type="hidden" id="admin-user-id"><div class="form-group"><label for="admin-user-nombre">Nombre *</label><input id="admin-user-nombre" required></div><div class="form-group"><label for="admin-user-apellido">Apellido *</label><input id="admin-user-apellido" required></div><div class="form-group"><label for="admin-user-documento">Documento</label><input id="admin-user-documento"></div><div class="form-group"><label for="admin-user-telefono">Teléfono</label><input id="admin-user-telefono"></div><div class="form-group"><label for="admin-user-meta">Meta de llamadas *</label><input id="admin-user-meta" type="number" min="0" step="1" value="500" required></div><div class="form-group"><label for="admin-user-email">Correo *</label><input id="admin-user-email" type="email" required></div><div class="form-group"><label for="admin-user-password">Contraseña</label><input id="admin-user-password" type="password" minlength="6" placeholder="Solo al crear"></div><div class="form-actions form-actions-wide"><button id="btn-cancel-user-edit" class="btn-secondary hidden" type="button">Cancelar edición</button><button id="btn-save-user" class="btn-primary" type="submit">Crear asesor</button></div></form></div>
+      </div>
+      <div class="survey-panel hidden" data-panel="report">
+      <div class="card table-card"><div class="card-heading"><div><span class="section-kicker">ASESORES</span><h3>Asesores registrados</h3></div></div><div class="table-wrapper"><table class="users-table"><thead><tr><th>Asesor</th><th>Correo</th><th>Meta</th><th>Llamadas</th><th>% Meta</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="tabla-usuarios"></tbody></table></div></div>
+      </div>
+    </section>
+
+    <section id="vista-configuracion" class="view hidden">
+      <div class="page-heading"><div><span class="eyebrow">PERSONALIZACIÓN</span><h2>Configuración</h2><p>Personaliza el color del sistema y la identidad visual del reporte.</p></div></div>
+      <div class="card form-card config-card"><div class="config-preview"><div id="logo-preview" class="logo-preview"><span>LOGO</span></div><div><h3>Identidad del reporte</h3><p>La imagen se mostrará en la parte superior de los reportes impresos y PDF.</p></div></div><form id="config-form" class="config-grid"><div class="form-group"><label for="config-color">Color principal</label><input id="config-color" type="color" value="#0ea5e9"></div><div class="form-group"><label for="config-logo">Imagen de empresa</label><input id="config-logo" type="file" accept="image/png,image/jpeg,image/webp"></div><div class="form-actions form-actions-wide"><button type="submit" class="btn-primary">Guardar configuración</button><button id="btn-remove-logo" type="button" class="btn-secondary">Quitar imagen</button></div></form></div>
+    </section>
+
+    <section id="vista-respaldo" class="view hidden">
+      <div class="page-heading"><div><span class="eyebrow">ADMINISTRACIÓN</span><h2>Respaldo de información</h2><p>Descarga una copia completa de todas las llamadas y asesores registrados, sin importar los filtros aplicados en otras secciones.</p></div></div>
+      <div class="card form-card">
+        <div class="card-heading"><div><span class="section-kicker">RESPALDO COMPLETO</span><h3>Copia de seguridad en Excel</h3></div></div>
+        <p class="muted">Genera un archivo <strong>.xlsx</strong> con tres hojas: <strong>Llamadas</strong>, <strong>Encuestas</strong> y <strong>Perfiles</strong>. Guarda este archivo en un lugar seguro periódicamente.</p>
+        <div class="form-actions"><button id="btn-download-backup" class="btn-primary" type="button">⭳ Descargar respaldo completo</button></div>
+        <p id="backup-status" class="muted backup-status"></p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="report-preview-modal" class="report-preview-modal hidden" aria-hidden="true"><div class="report-preview-dialog"><div class="report-preview-head"><div><span class="section-kicker">VISTA PREVIA</span><h3>Reporte de cartera</h3></div><button id="btn-close-report-preview" class="btn-secondary" type="button">✕ Cerrar</button></div><div id="report-preview-content" class="report-preview-content"></div></div></div><div id="print-report" class="print-only"></div><div id="toast" class="toast" role="status" aria-live="polite"></div>
+<div id="update-banner" class="update-banner hidden"><span>Hay una nueva versión disponible.</span><button id="btn-update-now" type="button">Actualizar ahora</button></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="js/app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').then((reg) => {
+        reg.update();
+        const showUpdateBanner = (worker) => {
+          const banner = document.getElementById('update-banner');
+          banner.classList.remove('hidden');
+          document.getElementById('btn-update-now').onclick = () => worker.postMessage('SKIP_WAITING');
+        };
+        if (reg.waiting) showUpdateBanner(reg.waiting);
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              showUpdateBanner(newWorker);
+            }
+          });
+        });
+      }).catch((err) => console.error('No se pudo registrar el service worker:', err));
+      let refrescado = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refrescado) return;
+        refrescado = true;
+        window.location.reload();
+      });
+    });
+  }
+</script>
+</body>
+</html>

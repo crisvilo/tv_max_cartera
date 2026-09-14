@@ -1,0 +1,1 @@
+{"name":"grupo-tv-max-worker","private":true,"type":"module","scripts":{"dev":"wrangler dev","deploy":"wrangler deploy"},"dependencies":{"@neondatabase/serverless":"latest"},"devDependencies":{"wrangler":"latest"}}
