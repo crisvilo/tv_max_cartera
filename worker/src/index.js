@@ -1,12 +1,23 @@
 import { neon } from '@neondatabase/serverless';
 
+
+// ============================================================
+// CORS
+// ============================================================
+
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS'
 };
 
+
+// ============================================================
+// RESPUESTA JSON
+// ============================================================
+
 const json = (data, status = 200) => {
+
   return new Response(
     JSON.stringify(data),
     {
@@ -17,7 +28,13 @@ const json = (data, status = 200) => {
       }
     }
   );
+
 };
+
+
+// ============================================================
+// HASH DE CONTRASEÑA
+// ============================================================
 
 async function hashPassword(password, saltBase64) {
 
@@ -28,7 +45,10 @@ async function hashPassword(password, saltBase64) {
         atob(saltBase64),
         c => c.charCodeAt(0)
       )
-    : crypto.getRandomValues(new Uint8Array(16));
+    : crypto.getRandomValues(
+        new Uint8Array(16)
+      );
+
 
   const key = await crypto.subtle.importKey(
     'raw',
@@ -38,10 +58,11 @@ async function hashPassword(password, saltBase64) {
     ['deriveBits']
   );
 
+
   const bits = await crypto.subtle.deriveBits(
     {
       name: 'PBKDF2',
-      salt,
+      salt: salt,
       iterations: 210000,
       hash: 'SHA-256'
     },
@@ -49,12 +70,22 @@ async function hashPassword(password, saltBase64) {
     256
   );
 
+
   const hashArray = new Uint8Array(bits);
 
-  return `${btoa(String.fromCharCode(...salt))}:${btoa(
+
+  return `${btoa(
+    String.fromCharCode(...salt)
+  )}:${btoa(
     String.fromCharCode(...hashArray)
   )}`;
+
 }
+
+
+// ============================================================
+// VERIFICAR CONTRASEÑA
+// ============================================================
 
 async function verifyPassword(password, stored) {
 
@@ -62,88 +93,155 @@ async function verifyPassword(password, stored) {
     return false;
   }
 
-  const [salt, hash] = stored.split(':');
+
+  const partes = stored.split(':');
+
+
+  if (partes.length !== 2) {
+    return false;
+  }
+
+
+  const salt = partes[0];
+  const hash = partes[1];
+
 
   if (!salt || !hash) {
     return false;
   }
 
-  const generated = await hashPassword(password, salt);
+
+  const generated = await hashPassword(
+    password,
+    salt
+  );
+
 
   return generated.split(':')[1] === hash;
+
 }
+
+
+// ============================================================
+// WORKER
+// ============================================================
 
 export default {
 
   async fetch(request, env) {
+
+    // --------------------------------------------------------
+    // CORS OPTIONS
+    // --------------------------------------------------------
 
     if (request.method === 'OPTIONS') {
 
       return new Response(
         null,
         {
+          status: 204,
           headers: cors
         }
       );
 
     }
 
+
     try {
 
-      const url = new URL(request.url);
+      const url = new URL(
+        request.url
+      );
 
-      /*
-       =========================
-       HEALTH CHECK
-       =========================
-      */
 
-      if (url.pathname === '/api/health') {
+      // ======================================================
+      // API HEALTH
+      // ======================================================
+
+      if (
+        url.pathname === '/api/health'
+      ) {
 
         return json({
+
           ok: true,
+
           service: 'Grupo TV MAX API',
+
           status: 'online',
-          databaseConfigured: Boolean(env.DATABASE_URL),
-          environmentKeys: Object.keys(env)
+
+          databaseConfigured:
+            Boolean(env.DATABASE_URL),
+
+          environmentKeys:
+            Object.keys(env)
+
         });
 
       }
-      if (url.pathname === '/api/db-test') {
 
-  if (!env.DATABASE_URL) {
-    return json({
-      ok: false,
-      error: 'DATABASE_URL no configurada'
-    }, 500);
-  }
 
-  const sql = neon(env.DATABASE_URL);
+      // ======================================================
+      // PRUEBA DE CONEXIÓN CON NEON
+      // ======================================================
 
-  const result = await sql`
-    SELECT NOW() AS fecha,
-           current_database() AS base_datos
-  `;
+      if (
+        url.pathname === '/api/db-test'
+      ) {
 
-  return json({
-    ok: true,
-    database: 'Neon conectado correctamente',
-    result
-  });
+        if (!env.DATABASE_URL) {
 
-}
+          return json(
+            {
+              ok: false,
+              error:
+                'DATABASE_URL no está configurada'
+            },
+            500
+          );
 
-      /*
-       =========================
-       VERIFICAR DATABASE
-       =========================
-      */
+        }
+
+
+        const sql = neon(
+          env.DATABASE_URL
+        );
+
+
+        const result = await sql`
+
+          SELECT
+            NOW() AS fecha,
+            current_database() AS base_datos
+
+        `;
+
+
+        return json({
+
+          ok: true,
+
+          database:
+            'Neon conectado correctamente',
+
+          result
+
+        });
+
+      }
+
+
+      // ======================================================
+      // VERIFICAR DATABASE_URL
+      // ======================================================
 
       if (!env.DATABASE_URL) {
 
         return json(
           {
-            error: 'DATABASE_URL no está configurada'
+            ok: false,
+            error:
+              'DATABASE_URL no está configurada'
           },
           500
         );
@@ -151,36 +249,50 @@ export default {
       }
 
 
-      /*
-       =========================
-       CONEXIÓN NEON
-       =========================
-      */
+      // ======================================================
+      // CONEXIÓN CON NEON
+      // ======================================================
 
-      const sql = neon(env.DATABASE_URL);
+      const sql = neon(
+        env.DATABASE_URL
+      );
 
 
-      /*
-       =========================
-       LOGIN
-       =========================
-      */
+      // ======================================================
+      // LOGIN
+      // ======================================================
 
       if (
         url.pathname === '/api/auth/login' &&
         request.method === 'POST'
       ) {
 
-        const body = await request.json();
 
-        const email = body.email;
-        const password = body.password;
+        const body =
+          await request.json();
 
-        if (!email || !password) {
+
+        const email =
+          body.email;
+
+
+        const password =
+          body.password;
+
+
+        // ----------------------------------------------------
+        // VALIDAR DATOS
+        // ----------------------------------------------------
+
+        if (
+          !email ||
+          !password
+        ) {
 
           return json(
             {
-              error: 'Email y contraseña son obligatorios'
+              error:
+                'Email y contraseña son obligatorios'
             },
             400
           );
@@ -188,9 +300,14 @@ export default {
         }
 
 
+        // ----------------------------------------------------
+        // BUSCAR USUARIO
+        // ----------------------------------------------------
+
         const rows = await sql`
 
           SELECT
+
             id,
             nombre,
             apellido,
@@ -201,21 +318,28 @@ export default {
 
           FROM perfilescr
 
-          WHERE LOWER(email) = LOWER(${email})
+          WHERE LOWER(email)
+            = LOWER(${email})
 
           LIMIT 1
 
         `;
 
 
-        const user = rows[0];
+        const user =
+          rows[0];
 
+
+        // ----------------------------------------------------
+        // USUARIO NO EXISTE
+        // ----------------------------------------------------
 
         if (!user) {
 
           return json(
             {
-              error: 'Credenciales inválidas'
+              error:
+                'Credenciales inválidas'
             },
             401
           );
@@ -223,11 +347,16 @@ export default {
         }
 
 
+        // ----------------------------------------------------
+        // USUARIO INACTIVO
+        // ----------------------------------------------------
+
         if (!user.activo) {
 
           return json(
             {
-              error: 'Usuario inactivo'
+              error:
+                'Usuario inactivo'
             },
             403
           );
@@ -235,17 +364,23 @@ export default {
         }
 
 
-        const passwordCorrect = await verifyPassword(
-          password,
-          user.password_hash
-        );
+        // ----------------------------------------------------
+        // VERIFICAR CONTRASEÑA
+        // ----------------------------------------------------
+
+        const passwordCorrect =
+          await verifyPassword(
+            password,
+            user.password_hash
+          );
 
 
         if (!passwordCorrect) {
 
           return json(
             {
-              error: 'Credenciales inválidas'
+              error:
+                'Credenciales inválidas'
             },
             401
           );
@@ -253,19 +388,33 @@ export default {
         }
 
 
+        // ----------------------------------------------------
+        // LOGIN CORRECTO
+        // ----------------------------------------------------
+
         return json({
 
           success: true,
 
-          message: 'Login correcto',
+          message:
+            'Login correcto',
 
           user: {
 
-            id: user.id,
-            nombre: user.nombre,
-            apellido: user.apellido,
-            email: user.email,
-            rol: user.rol
+            id:
+              user.id,
+
+            nombre:
+              user.nombre,
+
+            apellido:
+              user.apellido,
+
+            email:
+              user.email,
+
+            rol:
+              user.rol
 
           }
 
@@ -274,31 +423,39 @@ export default {
       }
 
 
-      /*
-       =========================
-       RUTA NO ENCONTRADA
-       =========================
-      */
+      // ======================================================
+      // RUTA NO ENCONTRADA
+      // ======================================================
 
       return json(
         {
-          error: 'Ruta no encontrada'
+          error:
+            'Ruta no encontrada'
         },
         404
       );
 
+
     }
     catch (error) {
+
+      // ------------------------------------------------------
+      // ERROR GENERAL
+      // ------------------------------------------------------
 
       console.error(
         'ERROR WORKER:',
         error
       );
 
+
       return json(
         {
-          error: 'Error interno del servidor',
-          detail: error.message
+          error:
+            'Error interno del servidor',
+
+          detail:
+            error.message
         },
         500
       );
@@ -308,6 +465,11 @@ export default {
   }
 
 };
+
+
+// ============================================================
+// EXPORTAR FUNCIONES
+// ============================================================
 
 export {
   hashPassword
