@@ -1293,6 +1293,143 @@ async function handleDeleteTable(request, env, table, id) {
   }
 }
 
+
+// ============================================================
+// DIAGNÓSTICO TEMPORAL DE PBKDF2
+// ============================================================
+
+async function handleLoginDiagnostic(request, env) {
+  try {
+    const body = await request.json();
+    const email = String(body?.email || "").trim().toLowerCase();
+    const password = String(body?.password ?? "");
+
+    if (!email) {
+      return json({ ok: false, error: "Falta email" }, 400);
+    }
+
+    const sql = getDB(env);
+
+    const rows = await sql`
+      SELECT
+        id,
+        email,
+        activo,
+        password_hash
+      FROM perfilescr
+      WHERE lower(email) = ${email}
+      LIMIT 1
+    `;
+
+    if (!rows.length) {
+      return json({
+        ok: true,
+        diagnostic: {
+          userFound: false,
+          active: false,
+          hashPresent: false
+        }
+      });
+    }
+
+    const user = rows[0];
+    const stored = String(user.password_hash || "");
+    const parts = stored.trim().split(":");
+    const hashFormat = parts.length === 2 && !!parts[0] && !!parts[1];
+
+    if (!hashFormat) {
+      return json({
+        ok: true,
+        diagnostic: {
+          userFound: true,
+          active: Boolean(user.activo),
+          hashPresent: Boolean(stored),
+          hashFormat: false
+        }
+      });
+    }
+
+    const saltText = parts[0].trim();
+    const expectedHashText = parts[1].trim();
+
+    let saltBytes;
+    let expectedHashBytes;
+    let generatedHashBytes;
+    let derivedHashText = "";
+    let byteComparison = false;
+
+    try {
+      saltBytes = base64UrlDecode(saltText);
+      expectedHashBytes = base64UrlDecode(expectedHashText);
+
+      const key = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(password),
+        "PBKDF2",
+        false,
+        ["deriveBits"]
+      );
+
+      const bits = await crypto.subtle.deriveBits(
+        {
+          name: "PBKDF2",
+          salt: saltBytes,
+          iterations: 210000,
+          hash: "SHA-256"
+        },
+        key,
+        expectedHashBytes.length * 8
+      );
+
+      generatedHashBytes = new Uint8Array(bits);
+      derivedHashText = base64UrlEncode(generatedHashBytes);
+
+      if (generatedHashBytes.length === expectedHashBytes.length) {
+        let result = 0;
+        for (let i = 0; i < expectedHashBytes.length; i++) {
+          result |= generatedHashBytes[i] ^ expectedHashBytes[i];
+        }
+        byteComparison = result === 0;
+      }
+    } catch (error) {
+      return json({
+        ok: true,
+        diagnostic: {
+          userFound: true,
+          active: Boolean(user.activo),
+          hashPresent: true,
+          hashFormat: true,
+          cryptoError: String(error?.message || error)
+        }
+      });
+    }
+
+    return json({
+      ok: true,
+      diagnostic: {
+        userFound: true,
+        active: Boolean(user.activo),
+        hashPresent: true,
+        hashFormat: true,
+        saltLengthChars: saltText.length,
+        saltBytes: saltBytes.length,
+        hashLengthChars: expectedHashText.length,
+        hashBytes: expectedHashBytes.length,
+        generatedHashLength: generatedHashBytes.length,
+        passwordValid: byteComparison,
+        storedHashPrefix: expectedHashText.slice(0, 12),
+        generatedHashPrefix: derivedHashText.slice(0, 12)
+      }
+    });
+  } catch (error) {
+    return errorResponse(
+      "Error en diagnóstico de login",
+      500,
+      String(error?.message || error)
+    );
+  }
+}
+
 // ============================================================
 // ROUTER
 // ============================================================
@@ -1344,6 +1481,17 @@ async function router(request, env) {
     method === "GET"
   ) {
     return await handleDBSchema(env);
+  }
+
+  // ----------------------------------------------------------
+  // LOGIN DIAGNOSTIC (TEMPORAL)
+  // ----------------------------------------------------------
+
+  if (
+    pathname === "/api/auth/login-diagnostic" &&
+    method === "POST"
+  ) {
+    return await handleLoginDiagnostic(request, env);
   }
 
   // ----------------------------------------------------------
