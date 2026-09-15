@@ -78,10 +78,8 @@
       async signInWithPassword({email,password}){
         const r=await apiFetch('/api/auth/login',{method:'POST',body:JSON.stringify({email,password})});
         if(!r.ok) return {data:null,error:{message:r.body?.error||'Credenciales inválidas'}};
-        const token = r.body?.session?.access_token || r.body?.access_token || r.body?.token;
-        if(!token) return {data:null,error:{message:'La API no devolvió el token de sesión'}};
-        setToken(token);
-        return {data:{session:{access_token:token,user:r.body.user},user:r.body.user},error:null};
+        setToken(r.body.token);
+        return {data:{session:{access_token:r.body.token,user:r.body.user},user:r.body.user},error:null};
       },
       async signUp({email,password,options={}}){
         const r=await apiFetch('/api/auth/register',{method:'POST',body:JSON.stringify({email,password,...(options.data||{})})});
@@ -167,7 +165,7 @@
     if(profile.rol==="administrador"){await loadAdminData();showView("admin-dashboard");} else {await loadAdvisorData();showView("vista-asesor");}
   }
 
-  async function loadConfig(){const {data}=await sbClient.from("configuracioncr").select("color_principal,logo_url").eq("id",1).maybeSingle(); if(data) config=data; applyTheme(); renderConfig();}
+  async function loadConfig(){const {data,error}=await sbClient.from("configuracioncr").select("color_principal,logo_url").eq("id",1).maybeSingle(); if(error){console.error("CONFIG ERROR:",error);return;} if(data) config=data; applyTheme(); renderConfig();}
 
   async function loadAdvisorData(){
     const [cr,sr,sgr,srr]=await Promise.all([
