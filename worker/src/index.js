@@ -1143,6 +1143,16 @@ async function handlePostTable(request, env, table) {
 
     const body = await request.json();
 
+    // Validación explícita de los campos obligatorios de llamadascr.
+    // Evita que PostgreSQL devuelva un 500 genérico cuando falta tipo_gestion.
+    if (table === "llamadascr") {
+      const required = ["asesor_id", "cliente", "llamada", "tipo_gestion", "zona", "whatsapp_enviado", "compromiso_pago", "pago", "fecha_llamada"];
+      const missing = required.filter((key) => body[key] === undefined || body[key] === null || body[key] === "");
+      if (missing.length) {
+        return errorResponse(`Faltan campos obligatorios: ${missing.join(", ")}`, 400);
+      }
+    }
+
     const allowedColumns = TABLE_COLUMNS[table];
 
     const entries = Object.entries(body)
