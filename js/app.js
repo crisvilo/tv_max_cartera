@@ -165,14 +165,34 @@
     if(error){showToast(authError(error),true);return;} id("register-form").reset(); if(data.session){showToast("Asesor registrado correctamente.");await initializeSession(data.user);}else{showToast("Registro creado. Revisa el correo para confirmar la cuenta.");showAuthView();}
   }
 
+  function normalizeRole(value){ return String(value || "").trim().toLowerCase(); }
+  function isAdminRole(value){ const role=normalizeRole(value); return role==="administrador" || role==="admin"; }
+  function isCurrentAdmin(){ return isAdminRole(currentProfile?.rol); }
+
   async function initializeSession(user) {
     currentUser=user;
-    const {data:profile,error}=await sbClient.from("perfilescr").select("*").eq("id",user.id).single();
+
+    // El rol autoritativo viene de /api/auth/me (Cloudflare + Neon).
+    // Esto evita que un dato antiguo del navegador determine si es asesor o administrador.
+    let profile=null;
+    let error=null;
+    try {
+      const me=await apiFetch('/api/auth/me');
+      if(me.ok && me.body?.user) profile=me.body.user;
+      else error={message:me.body?.error || `Error ${me.status}`};
+    } catch(e) { error=e; }
+
+    // Fallback al perfil de la API de datos si /me no estuviera disponible.
+    if(!profile){
+      const result=await sbClient.from("perfilescr").select("*").eq("id",user.id).single();
+      profile=result.data;
+      error=result.error;
+    }
     if(error){console.error(error);await sbClient.auth.signOut();showToast("No fue posible cargar tu perfil. Ejecuta el SQL de Cartera.",true);return;}
     if(profile.activo === false){await sbClient.auth.signOut();showToast("Tu usuario está inhabilitado. Contacta al administrador.",true);return;}
-    profile.rol = String(profile.rol || "").trim().toLowerCase();
+    profile.rol = normalizeRole(profile.rol);
     currentProfile=profile; await loadConfig(); updateSessionHeader(); buildSidebar();
-    if(profile.rol==="administrador" || profile.rol==="admin"){await loadAdminData();showView("admin-dashboard");} else {await loadAdvisorData();showView("vista-asesor");}
+    if(isAdminRole(profile.rol)){await loadAdminData();showView("admin-dashboard");} else {await loadAdvisorData();showView("vista-asesor");}
   }
 
   async function loadConfig(){
@@ -237,18 +257,18 @@
   function setAdminCallTodayDefault(){const x=id("adminCallFecha");if(x&&!x.value)x.value=getTodayISO();}
 
   async function setPago(callId,val){
-    if(!currentProfile||currentProfile.rol!=="administrador")return;
+    if(!currentProfile||!isCurrentAdmin())return;
     const {data,error}=await sbClient.from("llamadascr").update({pago:val}).eq("id",callId).select(`*,perfilescr:asesor_id (id,nombre,apellido,zona,email,activo)`).single();
     if(error){showToast("No fue posible actualizar el pago.",true);return;} updateCallLocal(data); showToast(val?"Marcado como pagado.":"Marcado como no pagado.");
   }
   function updateCallLocal(data){const i=calls.findIndex(x=>x.id===data.id);if(i>=0)calls[i]=data;renderAdmin();updateAdminDashboard();}
   async function deleteCall(callId){if(!confirm("¿Eliminar definitivamente esta llamada? Esta acción no se puede deshacer."))return;const {error}=await sbClient.from("llamadascr").delete().eq("id",callId);if(error){showToast("No fue posible eliminar la llamada. Verifica las políticas RLS.",true);return;}calls=calls.filter(x=>x.id!==callId);renderAdmin();updateAdminDashboard();showToast("Llamada eliminada.");}
 
-  function buildSidebar(){const nav=id("sidebar-nav");const admin=currentProfile?.rol==="administrador";const items=admin?[ ["admin-dashboard","▦","Dashboard"],["vista-admin","＋","Registrar llamada","form"],["vista-admin","▤","Ver llamadas","report"],["vista-encuestas-hub","☑","Encuestas"],["vista-usuarios","＋","Registrar asesor","form"],["vista-usuarios","▤","Reporte asesores","report"],["vista-configuracion","⚙","Configuración"],["vista-respaldo","⭳","Respaldo"] ]:[["vista-asesor","▦","Mi dashboard"],["vista-asesor","＋","Registrar llamada"],["vista-asesor","▤","Mis llamadas"],["vista-encuestas-hub","☑","Encuestas"]];nav.innerHTML=items.map(([target,icon,label,mode])=>`<button class="nav-item" type="button" data-target="${target}" data-mode="${mode||''}" data-anchor="${target==='vista-asesor'?label:''}"><span>${icon}</span>${label}</button>`).join("");nav.querySelectorAll(".nav-item").forEach(b=>b.addEventListener("click",()=>{showView(b.dataset.target);if(b.dataset.mode)setSectionMode(b.dataset.target,b.dataset.mode);if(b.dataset.anchor==="Registrar llamada")id("asesor-form-section").scrollIntoView({behavior:"smooth"});if(b.dataset.anchor==="Mis llamadas")document.querySelector("#vista-asesor .table-card").scrollIntoView({behavior:"smooth"});closeSidebar();}));applyRoleVisibility();}
-  function applyRoleVisibility(){const admin=currentProfile?.rol==="administrador";document.querySelectorAll(".admin-only").forEach(el=>el.classList.toggle("hidden",!admin));}
+  function buildSidebar(){const nav=id("sidebar-nav");const admin=isCurrentAdmin();const items=admin?[ ["admin-dashboard","▦","Dashboard"],["vista-admin","＋","Registrar llamada","form"],["vista-admin","▤","Ver llamadas","report"],["vista-encuestas-hub","☑","Encuestas"],["vista-usuarios","＋","Registrar asesor","form"],["vista-usuarios","▤","Reporte asesores","report"],["vista-configuracion","⚙","Configuración"],["vista-respaldo","⭳","Respaldo"] ]:[["vista-asesor","▦","Mi dashboard"],["vista-asesor","＋","Registrar llamada"],["vista-asesor","▤","Mis llamadas"],["vista-encuestas-hub","☑","Encuestas"]];nav.innerHTML=items.map(([target,icon,label,mode])=>`<button class="nav-item" type="button" data-target="${target}" data-mode="${mode||''}" data-anchor="${target==='vista-asesor'?label:''}"><span>${icon}</span>${label}</button>`).join("");nav.querySelectorAll(".nav-item").forEach(b=>b.addEventListener("click",()=>{showView(b.dataset.target);if(b.dataset.mode)setSectionMode(b.dataset.target,b.dataset.mode);if(b.dataset.anchor==="Registrar llamada")id("asesor-form-section").scrollIntoView({behavior:"smooth"});if(b.dataset.anchor==="Mis llamadas")document.querySelector("#vista-asesor .table-card").scrollIntoView({behavior:"smooth"});closeSidebar();}));applyRoleVisibility();}
+  function applyRoleVisibility(){const admin=isCurrentAdmin();document.querySelectorAll(".admin-only").forEach(el=>el.classList.toggle("hidden",!admin));}
   function closeSidebar(){id("sidebar").classList.remove("open");}
 
-  function updateSessionHeader(){const name=[currentProfile?.nombre,currentProfile?.apellido].filter(Boolean).join(" ")||"Usuario", role=currentProfile?.rol==="administrador"?"Administrador":"Asesor";id("user-name").textContent=name;id("user-role").textContent=role;id("user-avatar").textContent=name.charAt(0).toUpperCase();id("sidebar-user-name").textContent=name;id("sidebar-user-role").textContent=role;id("session-area").classList.remove("hidden");id("btn-menu").classList.remove("hidden");id("sidebar").classList.remove("hidden");}
+  function updateSessionHeader(){const name=[currentProfile?.nombre,currentProfile?.apellido].filter(Boolean).join(" ")||"Usuario", role=isCurrentAdmin()?"Administrador":"Asesor";id("user-name").textContent=name;id("user-role").textContent=role;id("user-avatar").textContent=name.charAt(0).toUpperCase();id("sidebar-user-name").textContent=name;id("sidebar-user-role").textContent=role;id("session-area").classList.remove("hidden");id("btn-menu").classList.remove("hidden");id("sidebar").classList.remove("hidden");}
   function applyAdvisorProfile(){const select=id("zona");if(select){select.innerHTML=`<option value="">Seleccione la zona...</option>`+ZONAS.map(z=>`<option value="${escapeHTML(z)}">${escapeHTML(z)}</option>`).join("");select.value="";}id("asesor-zone-badge").textContent="Zona de trabajo: cualquier zona";id("asesor-welcome").textContent="Registra llamadas y selecciona la zona correspondiente en cada gestión.";}
 
   function getFilteredAsesorCalls(){const filtro=value("filtroAsesor").toLowerCase(),from=value("filtroAsesorDesde"),to=value("filtroAsesorHasta");return calls.filter(c=>{const matchText=[c.cliente,c.llamada,c.zona,c.observaciones,c.tipo_gestion].join(" ").toLowerCase().includes(filtro);const matchFrom=!from||c.fecha_llamada>=from;const matchTo=!to||c.fecha_llamada<=to;return matchText&&matchFrom&&matchTo;});}
@@ -682,7 +702,7 @@ ${sers}
     const select=id("filtroEncuestaAsesor"); if(!select)return;
     const current=select.value;
     const people=[...advisors];
-    if(currentProfile?.rol==="administrador" && !people.some(p=>p.id===currentProfile.id)) people.push(currentProfile);
+    if(isCurrentAdmin() && !people.some(p=>p.id===currentProfile.id)) people.push(currentProfile);
     surveys.forEach(s=>{const p=s.perfilescr;if(p&&!people.some(x=>x.id===p.id))people.push(p);});
     select.innerHTML='<option value="">Todos los responsables</option>'+people.map(a=>`<option value="${a.id}">${escapeHTML([a.nombre,a.apellido].filter(Boolean).join(" ")||a.email||"Usuario")}${a.rol==="administrador"?" · Administrador":""}</option>`).join("");
     select.value=current;
