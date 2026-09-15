@@ -78,8 +78,10 @@
       async signInWithPassword({email,password}){
         const r=await apiFetch('/api/auth/login',{method:'POST',body:JSON.stringify({email,password})});
         if(!r.ok) return {data:null,error:{message:r.body?.error||'Credenciales inválidas'}};
-        setToken(r.body.token);
-        return {data:{session:{access_token:r.body.token,user:r.body.user},user:r.body.user},error:null};
+        const token = r.body?.session?.access_token || r.body?.access_token || r.body?.token;
+        if(!token) return {data:null,error:{message:"La API no devolvió el token de sesión"}};
+        setToken(token);
+        return {data:{session:{access_token:token,user:r.body.user},user:r.body.user},error:null};
       },
       async signUp({email,password,options={}}){
         const r=await apiFetch('/api/auth/register',{method:'POST',body:JSON.stringify({email,password,...(options.data||{})})});
@@ -161,8 +163,11 @@
     const {data:profile,error}=await sbClient.from("perfilescr").select("*").eq("id",user.id).single();
     if(error){console.error(error);await sbClient.auth.signOut();showToast("No fue posible cargar tu perfil. Ejecuta el SQL de Cartera.",true);return;}
     if(profile.activo === false){await sbClient.auth.signOut();showToast("Tu usuario está inhabilitado. Contacta al administrador.",true);return;}
+    // El rol que entrega /login o /me es la fuente de verdad.
+    // Lo normalizamos para evitar problemas por mayúsculas o espacios.
+    profile.rol = String(user?.rol || profile.rol || "").trim().toLowerCase();
     currentProfile=profile; await loadConfig(); updateSessionHeader(); buildSidebar();
-    if(profile.rol==="administrador"){await loadAdminData();showView("admin-dashboard");} else {await loadAdvisorData();showView("vista-asesor");}
+    if(profile.rol==="administrador" || profile.rol==="admin"){await loadAdminData();showView("admin-dashboard");} else {await loadAdvisorData();showView("vista-asesor");}
   }
 
   async function loadConfig(){const {data,error}=await sbClient.from("configuracioncr").select("color_principal,logo_url").eq("id",1).maybeSingle(); if(error){console.error("CONFIG ERROR:",error);return;} if(data) config=data; applyTheme(); renderConfig();}
@@ -734,7 +739,24 @@ ${sers}
   function showAuthView(){ALL_VIEWS.forEach(x=>id(x).classList.add("hidden"));id("auth-view").classList.remove("hidden");id("session-area").classList.add("hidden");id("btn-menu").classList.add("hidden");id("sidebar").classList.add("hidden");}
   function showView(viewId){ALL_VIEWS.forEach(x=>id(x).classList.add("hidden"));id(viewId).classList.remove("hidden");if(viewId!=="auth-view"&&currentProfile){id("session-area").classList.remove("hidden");id("btn-menu").classList.remove("hidden");id("sidebar").classList.remove("hidden");}}
   function setSectionMode(viewId,mode){const view=id(viewId);if(!view)return;const panels=view.querySelectorAll(":scope > .survey-panel");if(!panels.length)return;panels.forEach(p=>p.classList.toggle("hidden",p.dataset.panel!==mode));}
-  async function logout(){const {error}=await sbClient.auth.signOut();if(error)showToast("No fue posible cerrar la sesión.",true);}
+  async function logout(){
+    try {
+      await sbClient.auth.signOut();
+      currentUser=null;
+      currentProfile=null;
+      calls=[];
+      advisors=[];
+      surveys=[];
+      closeSidebar();
+      showAuthView();
+      const form=id("login-form");
+      if(form) form.reset();
+      showToast("Sesión cerrada correctamente.");
+    } catch(error) {
+      console.error("LOGOUT ERROR:",error);
+      showToast("No fue posible cerrar la sesión.",true);
+    }
+  }
   function llamadaBadge(t){if(t==="Contestada")return '<span class="badge badge-complete">Contestada</span>';if(t==="Equivocada")return '<span class="badge badge-cancelled">Equivocada</span>';return '<span class="badge badge-pending">No contestada</span>';}
   const TIPOS_GESTION_CORTO={"Gestión reporte a Data Crédito y abogados":"Reporte DataCrédito/abogados","Gestión lista de suspensión":"Lista de suspensión","Gestión recuperación de equipo":"Recuperación de equipo","Gestión ofreciendo servicio de la empresa":"Ofrecimiento de servicio","Gestión actualización de información":"Actualización de información"};
   function tipoGestionBadge(t){if(!t)return '<span class="badge badge-disabled">—</span>';return `<span class="badge badge-pending" title="${escapeHTML(t)}">${escapeHTML(TIPOS_GESTION_CORTO[t]||t)}</span>`;}
