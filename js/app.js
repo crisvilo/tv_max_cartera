@@ -1,16 +1,99 @@
 /* =========================================================
-   SISTEMA DE CARTERA - SUPABASE (misma base de datos que Ventas)
+   SISTEMA DE CARTERA - API CLOUDFLARE WORKER + NEON
    ========================================================= */
 (function () {
   "use strict";
   if (window.__carteraAppLoaded) return;
   window.__carteraAppLoaded = true;
 
-  // Mismo proyecto de Supabase que la app de Ventas (misma empresa, distinta área).
-  const SUPABASE_URL = "https://jsyeczuhdjusbcmpiiyg.supabase.co";
-  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_5gFuPfsCqONtLc1G_gk-jQ_eUPK30zp";
-  const { createClient } = window.supabase;
-  const sbClient = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  const API_BASE = "https://tvmaxcartera.cdviloria25.workers.dev";
+  const TOKEN_KEY = "tvmax_cartera_token";
+
+  function getToken(){ return localStorage.getItem(TOKEN_KEY) || ""; }
+  function setToken(token){ if(token) localStorage.setItem(TOKEN_KEY, token); else localStorage.removeItem(TOKEN_KEY); }
+
+  async function apiFetch(path, options={}) {
+    const headers = new Headers(options.headers || {});
+    headers.set("Content-Type", "application/json");
+    const token = getToken();
+    if(token) headers.set("Authorization", `Bearer ${token}`);
+    const response = await fetch(`${API_BASE}${path}`, {...options, headers});
+    const body = await response.json().catch(()=>({}));
+    if(!response.ok) return { ok:false, status:response.status, body };
+    return { ok:true, status:response.status, body };
+  }
+
+  function createQuery(table){
+    const state = {table, filters:[], orders:[], action:"select", payload:null, selectText:"*", upsert:false};
+    const builder = {
+      select(text="*") { state.selectText=text; return builder; },
+      eq(column,value) { state.filters.push([column,"eq",value]); return builder; },
+      order(column,opts={}) { state.orders.push([column, opts.ascending !== false]); return builder; },
+      insert(payload) { state.action="insert"; state.payload=payload; return builder; },
+      update(payload) { state.action="update"; state.payload=payload; return builder; },
+      delete() { state.action="delete"; return builder; },
+      upsert(payload,opts={}) { state.action="upsert"; state.payload=payload; state.upsert=true; return builder; },
+      single(){ state.single=true; return executeQuery(state); },
+      maybeSingle(){ state.maybeSingle=true; return executeQuery(state); },
+      then(resolve,reject){ return executeQuery(state).then(resolve,reject); },
+      catch(reject){ return executeQuery(state).catch(reject); }
+    };
+    return builder;
+  }
+
+  async function executeQuery(state){
+    const params = new URLSearchParams();
+    if(state.selectText) params.set("select", state.selectText);
+    state.filters.forEach(([c,o,v])=>params.append("eq", `${c}:${String(v)}`));
+    state.orders.forEach(([c,a])=>params.append("order", `${c}:${a?"asc":"desc"}`));
+    if(state.single) params.set("single","true");
+    if(state.maybeSingle) params.set("maybeSingle","true");
+
+    let result;
+    if(state.action === "select") {
+      result = await apiFetch(`/api/data/${encodeURIComponent(state.table)}?${params.toString()}`);
+    } else if(state.action === "insert") {
+      result = await apiFetch(`/api/data/${encodeURIComponent(state.table)}`, {method:"POST", body:JSON.stringify({action:"insert", data:state.payload, select:state.selectText, single:!!state.single})});
+    } else if(state.action === "update") {
+      result = await apiFetch(`/api/data/${encodeURIComponent(state.table)}`, {method:"PATCH", body:JSON.stringify({action:"update", data:state.payload, filters:state.filters, select:state.selectText, single:!!state.single})});
+    } else if(state.action === "delete") {
+      result = await apiFetch(`/api/data/${encodeURIComponent(state.table)}`, {method:"DELETE", body:JSON.stringify({filters:state.filters})});
+    } else if(state.action === "upsert") {
+      result = await apiFetch(`/api/data/${encodeURIComponent(state.table)}`, {method:"POST", body:JSON.stringify({action:"upsert", data:state.payload, select:state.selectText, single:!!state.single})});
+    }
+    if(!result.ok) return {data:null,error:{message:result.body?.error || `Error ${result.status}`}};
+    return {data:result.body?.data ?? null,error:null};
+  }
+
+  const sbClient = {
+    from(table){ return createQuery(table); },
+    auth:{
+      async getSession(){
+        const token=getToken();
+        if(!token) return {data:{session:null},error:null};
+        const r=await apiFetch('/api/auth/me');
+        if(!r.ok){setToken("");return {data:{session:null},error:null};}
+        return {data:{session:{access_token:token,user:r.body.user}},error:null};
+      },
+      async signInWithPassword({email,password}){
+        const r=await apiFetch('/api/auth/login',{method:'POST',body:JSON.stringify({email,password})});
+        if(!r.ok) return {data:null,error:{message:r.body?.error||'Credenciales inválidas'}};
+        setToken(r.body.token);
+        return {data:{session:{access_token:r.body.token,user:r.body.user},user:r.body.user},error:null};
+      },
+      async signUp({email,password,options={}}){
+        const r=await apiFetch('/api/auth/register',{method:'POST',body:JSON.stringify({email,password,...(options.data||{})})});
+        if(!r.ok) return {data:null,error:{message:r.body?.error||'No fue posible registrar el usuario'}};
+        if(r.body.token) setToken(r.body.token);
+        return {data:{session:r.body.token?{access_token:r.body.token,user:r.body.user}:null,user:r.body.user},error:null};
+      },
+      async signOut(){ setToken(""); return {error:null}; },
+      onAuthStateChange(callback){
+        return {data:{subscription:{unsubscribe(){}}}};
+      }
+    }
+  };
+
   const LLAMADA_TYPES = ["Contestada", "No contestada", "Equivocada"];
   // Zonas predeterminadas del sistema de cartera.
   const ZONAS = ["San Marcos", "Caucasia", "Caucasia Subsidiada", "Montelíbano", "La Apartada", "Buenavista"];
@@ -216,7 +299,11 @@
   function downloadSimpleCSV(name,rows){if(!rows.length){showToast("No hay datos para exportar.",true);return;}const keys=Object.keys(rows[0]).filter(k=>!["id","asesor_id"].includes(k));const csv=[keys.join(","),...rows.map(r=>keys.map(k=>`"${String(r[k]??"").replaceAll('"','""')}"`).join(","))].join("\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}));a.download=`reporte_${name}.csv`;a.click();}
 
   async function saveAdminUser(e){e.preventDefault();const idUser=id("admin-user-id").value;const body={nombre:value("admin-user-nombre"),apellido:value("admin-user-apellido"),documento:value("admin-user-documento"),telefono:value("admin-user-telefono"),zona:"",email:value("admin-user-email"),meta_mensual:Math.max(0,parseInt(id("admin-user-meta").value,10)||META_POR_DEFECTO)};if(!idUser){const password=id("admin-user-password").value;if(password.length<6){showToast("La contraseña debe tener mínimo 6 caracteres.",true);return;}const {data,error}=await fetchAdminFunction("create",{...body,password});if(error){showToast(error,true);return;}showToast("Asesor creado correctamente.");resetUserForm();await loadAdminData();return;}const result=await fetchAdminFunction("update",{user_id:idUser,...body});if(result.error){showToast(result.error,true);return;}showToast("Asesor actualizado.");resetUserForm();await loadAdminData();}
-  async function fetchAdminFunction(action,payload){const {data:{session}}=await sbClient.auth.getSession();if(!session)return{error:"Sesión no disponible."};try{const r=await fetch(`${SUPABASE_URL}/functions/v1/admin-users-cr`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session.access_token}`},body:JSON.stringify({action,...payload})});const j=await r.json().catch(()=>({}));return r.ok?{data:j}:{error:j.error||`Error ${r.status}`};}catch(e){return{error:"No se pudo contactar la función de administración. Debes desplegar supabase/functions/admin-users-cr."};}}
+  async function fetchAdminFunction(action,payload){
+    const r=await apiFetch("/api/admin/users",{method:"POST",body:JSON.stringify({action,...payload})});
+    if(!r.ok)return{error:r.body?.error||`Error ${r.status}`};
+    return{data:r.body?.data??r.body};
+  }
   function editAdvisor(uid){const a=advisors.find(x=>x.id===uid);if(!a)return;id("admin-user-id").value=a.id;["nombre","apellido","documento","telefono","email"].forEach(k=>id(`admin-user-${k}`).value=a[k]||"");id("admin-user-meta").value=metaDe(a);id("admin-user-password").value="";id("btn-save-user").textContent="Actualizar asesor";id("btn-cancel-user-edit").classList.remove("hidden");setSectionMode("vista-usuarios","form");document.getElementById("vista-usuarios").scrollIntoView({behavior:"smooth"});}
   function resetUserForm(){id("admin-user-form").reset();id("admin-user-id").value="";id("admin-user-meta").value=META_POR_DEFECTO;id("btn-save-user").textContent="Crear asesor";id("btn-cancel-user-edit").classList.add("hidden");}
   async function toggleAdvisor(uid,active){const {error}=await sbClient.from("perfilescr").update({activo:!active}).eq("id",uid);if(error){showToast(error.message,true);return;}showToast(active?"Asesor inhabilitado.":"Asesor habilitado.");await loadAdminData();}
