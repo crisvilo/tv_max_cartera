@@ -93,7 +93,7 @@
         </form>
       </div>
 
-      <div class="card table-card"><div class="card-heading table-heading"><div><span class="section-kicker">HISTORIAL</span><h3>Mis llamadas</h3></div><div class="table-tools"><input id="filtroAsesor" type="search" placeholder="Buscar cliente, zona u observación..."><button id="btn-asesor-report" class="btn-secondary" type="button">👁 Ver mi reporte</button><button id="btn-asesor-print" class="btn-secondary" type="button">🖨 Imprimir</button><button id="btn-asesor-pdf" class="btn-primary" type="button">📄 Descargar PDF</button></div></div><div class="table-wrapper"><table><thead><tr><th>ID</th><th>Cliente</th><th>Llamada</th><th>Tipo de llamada</th><th>Zona</th><th>WhatsApp</th><th>Compromiso</th><th>Pago</th><th>Fecha</th></tr></thead><tbody id="tabla-asesor"></tbody></table></div></div>
+      <div class="card table-card"><div class="card-heading table-heading"><div><span class="section-kicker">HISTORIAL</span><h3>Mis llamadas</h3><p class="muted">Filtra por fecha para descargar tu informe diario.</p></div><div class="table-tools"><input id="filtroAsesor" type="search" placeholder="Buscar cliente, zona u observación..."><input id="filtroAsesorDesde" type="date" title="Desde"><input id="filtroAsesorHasta" type="date" title="Hasta"><button id="btn-limpiar-filtro-asesor" class="btn-secondary" type="button">Limpiar</button><button id="btn-asesor-report" class="btn-secondary" type="button">👁 Ver mi reporte</button><button id="btn-asesor-print" class="btn-secondary" type="button">🖨 Imprimir</button><button id="btn-asesor-pdf" class="btn-primary" type="button">📄 Descargar PDF</button></div></div><div class="table-wrapper"><table><thead><tr><th>ID</th><th>Cliente</th><th>Llamada</th><th>Tipo de llamada</th><th>Zona</th><th>WhatsApp</th><th>Compromiso</th><th>Pago</th><th>Fecha</th></tr></thead><tbody id="tabla-asesor"></tbody></table></div></div>
 
       <div class="card table-card"><div class="card-heading"><div><span class="section-kicker">SEGUIMIENTO</span><h3>Veces que he contactado a cada cliente este mes</h3></div></div><div class="table-wrapper"><table><thead><tr><th>Cliente</th><th>Llamadas</th><th>Contestadas</th><th>No contestadas</th><th>Compromisos</th><th>Pagos</th></tr></thead><tbody id="tabla-seguimiento-asesor"></tbody></table></div></div>
     </section>
@@ -112,6 +112,33 @@
 
     <section id="vista-admin" class="view hidden">
       <div class="page-heading"><div><span class="eyebrow">LLAMADAS</span><h2>Gestión de cartera</h2><p>Consulta, filtra y descarga el detalle de las llamadas registradas.</p></div></div>
+
+      <div class="survey-panel" data-panel="form">
+      <div class="card form-card">
+        <div class="card-heading"><div><span class="section-kicker">NUEVA LLAMADA</span><h3>Registrar llamada (administrador)</h3><p class="muted">El administrador también puede llamar directamente a los usuarios y registrar la gestión aquí.</p></div></div>
+        <form id="admin-call-form" class="sale-grid">
+          <div class="form-group"><label for="adminCallCliente">Cliente <span>*</span></label><input type="text" id="adminCallCliente" required placeholder="Nombre o código de cliente"></div>
+          <div class="form-group"><label for="adminCallLlamada">Llamada <span>*</span></label><select id="adminCallLlamada" required><option value="">Seleccione...</option><option value="Contestada">Contestada</option><option value="No contestada">No contestada</option><option value="Equivocada">Equivocada</option></select></div>
+          <div class="form-group"><label for="adminCallZona">Zona de la llamada <span>*</span></label><select id="adminCallZona" required><option value="">Seleccione la zona...</option><option value="San Marcos">San Marcos</option><option value="Caucasia">Caucasia</option><option value="Caucasia Subsidiada">Caucasia Subsidiada</option><option value="Montelíbano">Montelíbano</option><option value="La Apartada">La Apartada</option><option value="Buenavista">Buenavista</option></select></div>
+          <div class="form-group form-group-wide"><label for="adminCallTipoGestion">Tipo de llamada (gestión)</label><select id="adminCallTipoGestion"><option value="">Sin especificar</option><option>Gestión reporte a Data Crédito y abogados</option><option>Gestión lista de suspensión</option><option>Gestión recuperación de equipo</option><option>Gestión ofreciendo servicio de la empresa</option><option>Gestión actualización de información</option></select></div>
+                    <div class="form-group"><label for="adminCallFecha">Fecha de la llamada <span>*</span></label><input type="date" id="adminCallFecha" required></div>
+
+          <div class="form-group"><label for="adminCallWhatsapp">WhatsApp</label><select id="adminCallWhatsapp"><option value="false">No se contactó</option><option value="true">Se envió mensaje</option></select></div>
+          <div class="form-group form-group-wide hidden" id="adminCallWhatsappMensajeGroup"><label for="adminCallWhatsappMensaje">Mensaje enviado</label><input type="text" id="adminCallWhatsappMensaje" placeholder="Ej. Recordatorio de pago enviado"></div>
+          <div class="form-group form-group-wide hidden" id="adminCallWhatsappRespuestaGroup"><label for="adminCallWhatsappRespuesta">Respuesta del cliente</label><input type="text" id="adminCallWhatsappRespuesta" placeholder="Ej. Confirmó que pagará el viernes"></div>
+
+          <div class="form-group"><label for="adminCallCompromiso">Compromiso de pago</label><select id="adminCallCompromiso"><option value="false">No</option><option value="true">Sí</option></select></div>
+          <div class="form-group hidden" id="adminCallFechaCompromisoGroup"><label for="adminCallFechaCompromiso">Fecha del compromiso</label><input type="date" id="adminCallFechaCompromiso"></div>
+          <div class="form-group"><label for="adminCallPago">Pago</label><select id="adminCallPago"><option value="false">No</option><option value="true">Sí</option></select></div>
+
+          <div class="form-group form-group-wide"><label for="adminCallObservaciones">Observaciones</label><input type="text" id="adminCallObservaciones" placeholder="Notas adicionales de la llamada"></div>
+
+          <div class="form-actions form-actions-wide"><button type="reset" class="btn-secondary">Limpiar</button><button type="submit" class="btn-primary">Registrar llamada</button></div>
+        </form>
+      </div>
+      </div>
+
+      <div class="survey-panel hidden" data-panel="report">
       <div class="card filters-card"><div class="card-heading"><div><span class="section-kicker">REPORTES</span><h3>Filtros de consulta</h3></div><div class="filter-actions"><button id="btn-clear-filters" class="btn-secondary" type="button">Limpiar filtros</button><button id="btn-preview-report" class="btn-secondary" type="button">👁 Vista previa</button><button id="btn-print-report" class="btn-primary" type="button">🖨 Imprimir</button><button id="btn-pdf-report" class="btn-primary" type="button">📄 Descargar PDF</button><button id="btn-excel-report" class="btn-secondary" type="button">📊 Descargar Excel</button></div></div><div class="filters-grid">
         <div class="form-group"><label for="filtroAdminTexto">Buscar</label><input id="filtroAdminTexto" type="search" placeholder="Cliente, zona, observaciones..."></div>
         <div class="form-group"><label for="ms-asesores-toggle">Asesores <small class="muted">(elige varios para comparar)</small></label>
@@ -135,6 +162,7 @@
        <div class="card table-card"><div class="card-heading table-heading"><div><span class="section-kicker">DETALLE</span><h3>Detalle de llamadas registradas</h3></div></div><div class="table-wrapper"><table class="admin-operation-table"><thead><tr><th>ID</th><th>Asesor</th><th>Cliente</th><th>Llamada</th><th>Tipo de llamada</th><th>Zona</th><th>WhatsApp</th><th>Compromiso</th><th>Pago</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody id="tabla-admin-detail"></tbody></table></div></div>
 
       <div class="card table-card"><div class="card-heading"><div><span class="section-kicker">SEGUIMIENTO</span><h3>Veces que se ha contactado a cada cliente (según filtros)</h3></div></div><div class="table-wrapper"><table><thead><tr><th>Cliente</th><th>Llamadas</th><th>Contestadas</th><th>No contestadas</th><th>Compromisos</th><th>Pagos</th><th>Asesor(es)</th></tr></thead><tbody id="tabla-seguimiento-admin"></tbody></table></div></div>
+      </div>
     </section>
 
     <section id="vista-encuestas-hub" class="view hidden">
@@ -272,6 +300,7 @@
 
 <div id="report-preview-modal" class="report-preview-modal hidden" aria-hidden="true"><div class="report-preview-dialog"><div class="report-preview-head"><div><span class="section-kicker">VISTA PREVIA</span><h3>Reporte de cartera</h3></div><button id="btn-close-report-preview" class="btn-secondary" type="button">✕ Cerrar</button></div><div id="report-preview-content" class="report-preview-content"></div></div></div><div id="print-report" class="print-only"></div><div id="toast" class="toast" role="status" aria-live="polite"></div>
 <div id="update-banner" class="update-banner hidden"><span>Hay una nueva versión disponible.</span><button id="btn-update-now" type="button">Actualizar ahora</button></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
