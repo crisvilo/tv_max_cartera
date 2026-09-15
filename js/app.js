@@ -145,7 +145,7 @@
     id("btn-print-survey-report").addEventListener("click", () => printReport(buildSurveyReportHTML));
     id("btn-pdf-survey-report").addEventListener("click", () => downloadPDF(buildSurveyReportHTML,"reporte-encuestas-cartera"));
     id("btn-excel-survey-report").addEventListener("click", downloadSurveyExcel);
-    id("config-form").addEventListener("submit", saveConfig); id("btn-remove-logo").addEventListener("click", removeLogo);
+    id("config-form").addEventListener("submit", saveConfig); id("btn-remove-logo").addEventListener("click", removeLogo); id("change-password-form").addEventListener("submit", changePassword); id("btn-clear-password").addEventListener("click", clearPasswordForm);
     id("btn-asesor-report").addEventListener("click", previewAdvisorReport); id("btn-asesor-print").addEventListener("click", printAdvisorReport); id("btn-asesor-pdf").addEventListener("click", downloadAdvisorPDF);
     id("btn-download-backup").addEventListener("click", downloadBackup);
     document.querySelectorAll("[data-hub-open]").forEach(b=>b.addEventListener("click",()=>{showView(b.dataset.hubOpen);setSectionMode(b.dataset.hubOpen,b.dataset.hubMode||"form");}));
@@ -358,6 +358,26 @@
   function resetUserForm(){id("admin-user-form").reset();id("admin-user-id").value="";id("admin-user-meta").value=META_POR_DEFECTO;id("btn-save-user").textContent="Crear asesor";id("btn-cancel-user-edit").classList.add("hidden");}
   async function toggleAdvisor(uid,active){const {error}=await sbClient.from("perfilescr").update({activo:!active}).eq("id",uid);if(error){showToast(error.message,true);return;}showToast(active?"Asesor inhabilitado.":"Asesor habilitado.");await loadAdminData();}
   async function deleteAdvisor(uid){const a=advisors.find(x=>x.id===uid);if(!a)return;if(!confirm(`¿Eliminar a ${[a.nombre,a.apellido].filter(Boolean).join(" ")||a.email}? Solo se podrá eliminar si no tiene llamadas registradas.`))return;const result=await fetchAdminFunction("delete",{user_id:uid});if(result.error){showToast(result.error,true);return;}showToast("Asesor eliminado.");await loadAdminData();}
+
+  async function changePassword(e){
+    e.preventDefault();
+    if(!currentUser){showToast("Tu sesión no está disponible.",true);return;}
+    const currentPassword=id("current-password").value;
+    const newPassword=id("new-password").value;
+    const confirmPassword=id("confirm-new-password").value;
+    if(newPassword.length<6){showToast("La nueva contraseña debe tener mínimo 6 caracteres.",true);return;}
+    if(newPassword!==confirmPassword){showToast("Las nuevas contraseñas no coinciden.",true);return;}
+    const button=e.submitter;
+    setButtonBusy(button,true,"Actualizando...");
+    try{
+      const r=await apiFetch("/api/auth/change-password",{method:"POST",body:JSON.stringify({currentPassword,newPassword,confirmPassword})});
+      if(!r.ok){showToast(r.body?.error||"No fue posible cambiar la contraseña.",true);return;}
+      id("change-password-form").reset();
+      showToast("Contraseña cambiada correctamente.");
+    }catch(error){console.error(error);showToast("No fue posible cambiar la contraseña.",true);}
+    finally{setButtonBusy(button,false,"Cambiar contraseña");}
+  }
+  function clearPasswordForm(){const form=id("change-password-form");if(form)form.reset();}
 
   async function saveConfig(e){e.preventDefault();let logo=config.logo_url||"";const file=id("config-logo").files[0];if(file){if(file.size>2*1024*1024){showToast("La imagen debe pesar máximo 2 MB.",true);return;}logo=await fileToDataURL(file);}const color=id("config-color").value;const {error}=await sbClient.from("configuracioncr").upsert({id:1,color_principal:color,logo_url:logo,updated_by:currentUser.id},{onConflict:"id"});if(error){showToast(error.message,true);return;}config={color_principal:color,logo_url:logo};applyTheme();renderConfig();showToast("Configuración guardada.");}
   async function removeLogo(){const {error}=await sbClient.from("configuracioncr").upsert({id:1,color_principal:config.color_principal,logo_url:"",updated_by:currentUser.id},{onConflict:"id"});if(error){showToast(error.message,true);return;}config.logo_url="";renderConfig();showToast("Imagen retirada del reporte.");}
