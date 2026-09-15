@@ -71,7 +71,7 @@
     } else if(state.action === "upsert") {
       result = await apiFetch(`/api/data/${encodeURIComponent(state.table)}`, {method:"POST", body:JSON.stringify({action:"upsert", data:state.payload, select:state.selectText, single:!!state.single})});
     }
-    if(!result.ok) return {data:null,error:{message:result.body?.error || `Error ${result.status}`}};
+    if(!result.ok) return {data:null,error:{message:result.body?.error || `Error ${result.status}`,detail:result.body?.detail||null,status:result.status}};
     return {data:result.body?.data ?? null,error:null};
   }
 
@@ -241,10 +241,11 @@
     const whatsapp=id("whatsappEnviado").value==="true", compromiso=id("compromisoPago").value==="true", pago=id("pago").value==="true";
     if(compromiso && !id("fechaCompromiso").value){showToast("Selecciona la fecha del compromiso de pago.",true);return;}
     const zonaSeleccionada=value("zona"); if(!ZONAS.includes(zonaSeleccionada)){showToast("Selecciona una zona válida de la lista.",true);return;}
-    const tipoGestionSeleccionado=value("tipoGestion")||null;
+    const tipoGestionSeleccionado=value("tipoGestion");
+    if(!tipoGestionSeleccionado){showToast("Selecciona el tipo de gestión realizada.",true);return;}
     const row={asesor_id:currentUser.id,cliente:value("cliente"),llamada:value("tipoLlamada"),tipo_gestion:tipoGestionSeleccionado,zona:zonaSeleccionada,whatsapp_enviado:whatsapp,whatsapp_mensaje:whatsapp?(value("whatsappMensaje")||null):null,whatsapp_respuesta:whatsapp?(value("whatsappRespuesta")||null):null,compromiso_pago:compromiso,fecha_compromiso:compromiso?id("fechaCompromiso").value:null,pago:pago,observaciones:value("observaciones")||null,fecha_llamada:id("fechaLlamada").value};
     if(!row.cliente||!row.llamada||!row.zona||!row.fecha_llamada){showToast("Completa todos los campos obligatorios.",true);return;}
-    const {data,error}=await sbClient.from("llamadascr").insert(row).select().single(); if(error){console.error(error);showToast(error.message||"No fue posible registrar la llamada.",true);return;}
+    const {data,error}=await sbClient.from("llamadascr").insert(row).select().single(); if(error){console.error("REGISTRO LLAMADA ERROR:",error);showToast(error.detail ? `${error.message}: ${error.detail}` : (error.message||"No fue posible registrar la llamada."),true);return;}
     e.target.reset();applyAdvisorProfile();setTodayDefault();toggleWhatsappFields();toggleCompromisoField();calls.unshift(data);renderAdvisorTable();updateAdvisorDashboard();renderSeguimientoAsesor();showToast("Llamada registrada correctamente.");
   }
 
@@ -256,11 +257,12 @@
     const whatsapp=id("adminCallWhatsapp").value==="true", compromiso=id("adminCallCompromiso").value==="true", pago=id("adminCallPago").value==="true";
     if(compromiso && !id("adminCallFechaCompromiso").value){showToast("Selecciona la fecha del compromiso de pago.",true);return;}
     const zonaSeleccionada=value("adminCallZona"); if(!ZONAS.includes(zonaSeleccionada)){showToast("Selecciona una zona válida de la lista.",true);return;}
-    const tipoGestionSeleccionado=value("adminCallTipoGestion")||null;
+    const tipoGestionSeleccionado=value("adminCallTipoGestion");
+    if(!tipoGestionSeleccionado){showToast("Selecciona el tipo de gestión realizada.",true);return;}
     const row={asesor_id:currentUser.id,cliente:value("adminCallCliente"),llamada:value("adminCallLlamada"),tipo_gestion:tipoGestionSeleccionado,zona:zonaSeleccionada,whatsapp_enviado:whatsapp,whatsapp_mensaje:whatsapp?(value("adminCallWhatsappMensaje")||null):null,whatsapp_respuesta:whatsapp?(value("adminCallWhatsappRespuesta")||null):null,compromiso_pago:compromiso,fecha_compromiso:compromiso?id("adminCallFechaCompromiso").value:null,pago:pago,observaciones:value("adminCallObservaciones")||null,fecha_llamada:id("adminCallFecha").value};
     if(!row.cliente||!row.llamada||!row.zona||!row.fecha_llamada){showToast("Completa todos los campos obligatorios.",true);return;}
     const {data,error}=await sbClient.from("llamadascr").insert(row).select(`*, perfilescr:asesor_id (id,nombre,apellido,zona,email,activo)`).single();
-    if(error){console.error(error);showToast(error.message||"No fue posible registrar la llamada.",true);return;}
+    if(error){console.error("REGISTRO LLAMADA ERROR:",error);showToast(error.detail ? `${error.message}: ${error.detail}` : (error.message||"No fue posible registrar la llamada."),true);return;}
     e.target.reset();setAdminCallTodayDefault();toggleAdminWhatsappFields();toggleAdminCompromisoField();
     calls.unshift(data);populateAdminFilters();renderAdmin();updateAdminDashboard();showToast("Llamada registrada correctamente.");
   }
@@ -886,8 +888,8 @@ ${sers}
   }
   function buildServicioReportHTML(){
     const rows=getFilteredServicio();
-    const trs=rows.map(x=>`<tr><td>${escapeHTML(x.usuario)}</td><td>${escapeHTML(x.servicio_retirado)}</td><td>${escapeHTML(x.motivo_retiro||"—")}</td><td>${escapeHTML(x.interes_retomar)}</td><td>${escapeHTML(x.observaciones||"—")}</td><td>${formatDate(surveyDate(x))}</td></tr>`).join("");
-    return `<div class="print-report-sheet">${config.logo_url?`<div class="print-logo"><img src="${config.logo_url}" alt="Logo"></div>`:""}<div class="print-header"><div><span class="print-kicker">ENCUESTA DE SERVICIO</span><h1>Reporte de retiros de servicio</h1><p>${rows.length} registro${rows.length===1?"":"s"}</p></div><div class="print-generated">Generado: ${new Date().toLocaleString("es-CO")}</div></div><div class="print-summary"><div class="print-summary-card"><span>Total retiros</span><strong>${rows.length}</strong></div><div class="print-summary-card"><span>Interesados en retomar</span><strong>${rows.filter(x=>x.interes_retomar==="SI").length}</strong></div><div class="print-summary-card"><span>No interesados</span><strong>${rows.filter(x=>x.interes_retomar==="NO").length}</strong></div></div><section class="print-table-section"><div class="print-table-title"><div><span class="print-kicker">DETALLE</span><h2>Encuestas de servicio</h2></div></div><div class="print-table-scroll"><table><thead><tr><th>Usuario</th><th>Servicio</th><th>Motivo retiro</th><th>Retomaría</th><th>Observaciones</th><th>Fecha</th></tr></thead><tbody>${trs||'<tr><td colspan="6" class="print-empty-row">No hay registros.</td></tr>'}</tbody></table></div></section></div>`;
+    const cards=rows.map((x,i)=>`<article class="survey-detail-card" style="border:1px solid #ddd7e7;border-radius:12px;padding:14px;margin:0 0 14px;background:#fff;break-inside:avoid;page-break-inside:avoid"><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px"><div><span class="print-kicker">ENCUESTA ${i+1}</span><h2 style="margin:3px 0 0">Detalle de encuesta de servicio</h2></div><strong>${formatDate(surveyDate(x))}</strong></div><table style="width:100%;border-collapse:collapse;font-size:10px"><tbody><tr><th style="width:28%;padding:7px;border:1px solid #ddd7e7;text-align:left">Usuario</th><td style="padding:7px;border:1px solid #ddd7e7">${escapeHTML(x.usuario||"—")}</td></tr><tr><th style="padding:7px;border:1px solid #ddd7e7;text-align:left">Servicio retirado</th><td style="padding:7px;border:1px solid #ddd7e7">${escapeHTML(x.servicio_retirado||"—")}</td></tr><tr><th style="padding:7px;border:1px solid #ddd7e7;text-align:left">Motivo del retiro</th><td style="padding:7px;border:1px solid #ddd7e7;white-space:pre-wrap">${escapeHTML(x.motivo_retiro||"—")}</td></tr><tr><th style="padding:7px;border:1px solid #ddd7e7;text-align:left">¿Le interesaría retomar?</th><td style="padding:7px;border:1px solid #ddd7e7">${escapeHTML(x.interes_retomar||"—")}</td></tr><tr><th style="padding:7px;border:1px solid #ddd7e7;text-align:left">Observaciones</th><td style="padding:7px;border:1px solid #ddd7e7;white-space:pre-wrap">${escapeHTML(x.observaciones||"—")}</td></tr></tbody></table></article>`).join("");
+    return `<div class="print-report-sheet">${config.logo_url?`<div class="print-logo"><img src="${config.logo_url}" alt="Logo"></div>`:""}<div class="print-header"><div><span class="print-kicker">ENCUESTA DE SERVICIO</span><h1>Reporte de retiros de servicio</h1><p>Detalle completo de las encuestas registradas</p></div><div class="print-generated">Generado: ${new Date().toLocaleString("es-CO")}</div></div><div class="print-summary"><div class="print-summary-card"><span>Total encuestas</span><strong>${rows.length}</strong></div><div class="print-summary-card"><span>Interesados en retomar</span><strong>${rows.filter(x=>x.interes_retomar==="SI").length}</strong></div><div class="print-summary-card"><span>No interesados</span><strong>${rows.filter(x=>x.interes_retomar==="NO").length}</strong></div></div><section class="print-table-section"><div class="print-table-title"><div><span class="print-kicker">RESPUESTAS</span><h2>Detalle individual</h2></div><strong>${rows.length} encuesta${rows.length===1?"":"s"}</strong></div>${cards||'<div class="print-empty-row" style="padding:20px">No hay registros para los filtros seleccionados.</div>'}</section></div>`;
   }
 
   document.addEventListener("DOMContentLoaded",()=>{["seg-filter-from","seg-filter-to","seg-filter-user","seg-filter-att","seg-filter-pay"].forEach(k=>id(k)?.addEventListener("input",renderSeguimientoSurveys));id("seg-filter-clear")?.addEventListener("click",clearSegFilters);["srv-filter-from","srv-filter-to","srv-filter-user","srv-filter-service","srv-filter-retomar"].forEach(k=>id(k)?.addEventListener("input",renderServicioSurveys));id("srv-filter-clear")?.addEventListener("click",clearSrvFilters);
