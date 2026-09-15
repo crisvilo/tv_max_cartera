@@ -1042,7 +1042,8 @@ async function handleGetTable(request, env, table) {
 
     const columns = TABLE_COLUMNS[table].join(", ");
 
-    const query = `SELECT ${columns} FROM ${table} ORDER BY created_at DESC`;
+    const orderColumn = table === "configuracioncr" ? "updated_at" : "created_at";
+    const query = `SELECT ${columns} FROM ${table} ORDER BY ${orderColumn} DESC`;
 
     const result = await sql.query(query);
 
