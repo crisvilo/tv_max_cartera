@@ -148,7 +148,7 @@ async function hashPassword(password, saltBytes = null) {
     {
       name: "PBKDF2",
       salt,
-      iterations: 210000,
+      iterations: 100000,
       hash: "SHA-256"
     },
     key,
@@ -193,7 +193,7 @@ async function verifyPassword(password, storedHash) {
       {
         name: "PBKDF2",
         salt: saltBytes,
-        iterations: 210000,
+        iterations: 100000,
         hash: "SHA-256"
       },
       key,
@@ -1374,7 +1374,7 @@ async function handleLoginDiagnostic(request, env) {
         {
           name: "PBKDF2",
           salt: saltBytes,
-          iterations: 210000,
+          iterations: 100000,
           hash: "SHA-256"
         },
         key,
