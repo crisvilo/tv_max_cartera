@@ -635,6 +635,63 @@ async function handleMe(request, env) {
 }
 
 // ============================================================
+// CAMBIAR CONTRASEÑA DEL USUARIO ACTUAL
+// ============================================================
+
+async function handleChangePassword(request, env) {
+  try {
+    const auth = await requireAuth(request, env);
+    if (!auth) return errorResponse("No autenticado", 401);
+
+    const body = await request.json();
+    const currentPassword = String(body.currentPassword || "");
+    const newPassword = String(body.newPassword || "");
+    const confirmPassword = String(body.confirmPassword || "");
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return errorResponse("Todos los campos de contraseña son obligatorios", 400);
+    }
+    if (newPassword.length < 6) {
+      return errorResponse("La nueva contraseña debe tener mínimo 6 caracteres", 400);
+    }
+    if (newPassword !== confirmPassword) {
+      return errorResponse("Las nuevas contraseñas no coinciden", 400);
+    }
+    if (currentPassword === newPassword) {
+      return errorResponse("La nueva contraseña debe ser diferente a la actual", 400);
+    }
+
+    const sql = getDB(env);
+    const users = await sql`
+      SELECT id, password_hash, activo
+      FROM perfilescr
+      WHERE id = ${auth.sub}
+      LIMIT 1
+    `;
+
+    if (!users.length) return errorResponse("Usuario no encontrado", 404);
+    if (!users[0].activo) return errorResponse("El usuario está inactivo", 403);
+
+    const valid = await verifyPassword(currentPassword, users[0].password_hash);
+    if (!valid) return errorResponse("La contraseña actual es incorrecta", 401);
+
+    const passwordData = await hashPassword(newPassword);
+    const passwordHash = `${passwordData.salt}:${passwordData.hash}`;
+
+    await sql`
+      UPDATE perfilescr
+      SET password_hash = ${passwordHash}, updated_at = NOW()
+      WHERE id = ${auth.sub}
+    `;
+
+    return json({ ok: true, message: "Contraseña actualizada correctamente" });
+  } catch (error) {
+    console.error("CHANGE PASSWORD ERROR:", error);
+    return errorResponse("Error interno al cambiar la contraseña", 500, error.message);
+  }
+}
+
+// ============================================================
 // AUTH TEST
 // ============================================================
 
@@ -1493,6 +1550,17 @@ async function router(request, env) {
     method === "POST"
   ) {
     return await handleLoginDiagnostic(request, env);
+  }
+
+  // ----------------------------------------------------------
+  // CHANGE PASSWORD
+  // ----------------------------------------------------------
+
+  if (
+    pathname === "/api/auth/change-password" &&
+    method === "POST"
+  ) {
+    return await handleChangePassword(request, env);
   }
 
   // ----------------------------------------------------------
