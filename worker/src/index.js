@@ -16,7 +16,7 @@ const corsHeaders = {
   "Access-Control-Max-Age": "86400"
 };
 
-const WORKER_VERSION = "neon-login-fix-2026-09-15-v4";
+const WORKER_VERSION = "neon-login-diagnostic-2026-09-15-v5";
 
 const jsonHeaders = {
   ...corsHeaders,
@@ -1300,6 +1300,71 @@ async function handleDeleteTable(request, env, table, id) {
 }
 
 // ============================================================
+// DIAGNOSTICO TEMPORAL DE LOGIN
+// NO EXPONE CONTRASEÑA NI PASSWORD_HASH
+// ============================================================
+
+async function handleLoginDiagnostic(request, env) {
+  try {
+    const body = await request.json();
+    const email = String(body.email || "").trim().toLowerCase();
+    const password = String(body.password || "");
+
+    if (!email || !password) {
+      return errorResponse("Correo y contraseña son obligatorios", 400);
+    }
+
+    const sql = getDB(env);
+    const users = await sql`
+      SELECT id, email, password_hash, activo
+      FROM perfilescr
+      WHERE LOWER(email) = ${email}
+      LIMIT 1
+    `;
+
+    if (!users || users.length === 0) {
+      return json({
+        ok: true,
+        diagnostic: {
+          userFound: false,
+          active: false,
+          hashPresent: false,
+          hashFormat: false,
+          passwordValid: false
+        }
+      });
+    }
+
+    const user = users[0];
+    const storedHash = String(user.password_hash || "");
+    const parts = storedHash.split(":");
+
+    let passwordValid = false;
+    try {
+      passwordValid = await verifyPassword(password, storedHash);
+    } catch (error) {
+      console.error("DIAGNOSTIC VERIFY ERROR:", error);
+    }
+
+    return json({
+      ok: true,
+      diagnostic: {
+        userFound: true,
+        active: Boolean(user.activo),
+        hashPresent: storedHash.length > 0,
+        hashFormat: parts.length === 2,
+        saltLength: parts.length === 2 ? parts[0].length : 0,
+        hashLength: parts.length === 2 ? parts[1].length : 0,
+        passwordValid
+      }
+    });
+  } catch (error) {
+    console.error("LOGIN DIAGNOSTIC ERROR:", error);
+    return errorResponse("Error en diagnóstico de login", 500, error.message);
+  }
+}
+
+// ============================================================
 // ROUTER
 // ============================================================
 
@@ -1358,6 +1423,17 @@ async function router(request, env) {
     method === "GET"
   ) {
     return await handleDBSchema(env);
+  }
+
+  // ----------------------------------------------------------
+  // DIAGNOSTICO TEMPORAL DE LOGIN
+  // ----------------------------------------------------------
+
+  if (
+    pathname === "/api/auth/login-diagnostic" &&
+    method === "POST"
+  ) {
+    return await handleLoginDiagnostic(request, env);
   }
 
   // ----------------------------------------------------------

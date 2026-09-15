@@ -2,7 +2,7 @@
  * Service Worker de "Gestión de Cartera"
  */
 
-const CACHE_VERSION = 'v6';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = `cartera-cache-${CACHE_VERSION}`;
 
 const APP_SHELL = [
