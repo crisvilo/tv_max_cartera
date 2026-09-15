@@ -53,11 +53,21 @@
     if(state.action === "select") {
       result = await apiFetch(`/api/data/${encodeURIComponent(state.table)}?${params.toString()}`);
     } else if(state.action === "insert") {
-      result = await apiFetch(`/api/data/${encodeURIComponent(state.table)}`, {method:"POST", body:JSON.stringify({action:"insert", data:state.payload, select:state.selectText, single:!!state.single})});
+      result = await apiFetch(`/api/data/${encodeURIComponent(state.table)}`, {method:"POST", body:JSON.stringify(state.payload)});
     } else if(state.action === "update") {
-      result = await apiFetch(`/api/data/${encodeURIComponent(state.table)}`, {method:"PATCH", body:JSON.stringify({action:"update", data:state.payload, filters:state.filters, select:state.selectText, single:!!state.single})});
+      const idFilter = state.filters.find(([column, operator]) => column === "id" && operator === "eq");
+      if (idFilter) {
+        result = await apiFetch(`/api/data/${encodeURIComponent(state.table)}/${encodeURIComponent(String(idFilter[2]))}`, {method:"PATCH", body:JSON.stringify(state.payload)});
+      } else {
+        result = {ok:false,status:400,body:{error:"La actualización requiere el id del registro"}};
+      }
     } else if(state.action === "delete") {
-      result = await apiFetch(`/api/data/${encodeURIComponent(state.table)}`, {method:"DELETE", body:JSON.stringify({filters:state.filters})});
+      const idFilter = state.filters.find(([column, operator]) => column === "id" && operator === "eq");
+      if (idFilter) {
+        result = await apiFetch(`/api/data/${encodeURIComponent(state.table)}/${encodeURIComponent(String(idFilter[2]))}`, {method:"DELETE"});
+      } else {
+        result = {ok:false,status:400,body:{error:"La eliminación requiere el id del registro"}};
+      }
     } else if(state.action === "upsert") {
       result = await apiFetch(`/api/data/${encodeURIComponent(state.table)}`, {method:"POST", body:JSON.stringify({action:"upsert", data:state.payload, select:state.selectText, single:!!state.single})});
     }
