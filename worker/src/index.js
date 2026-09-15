@@ -9,6 +9,8 @@ import { neon } from "@neondatabase/serverless";
 // CONFIGURACIÓN GENERAL
 // ============================================================
 
+const API_VERSION = "neon-login-fix-2026-09-15-v2";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
@@ -18,7 +20,8 @@ const corsHeaders = {
 
 const jsonHeaders = {
   ...corsHeaders,
-  "Content-Type": "application/json; charset=utf-8"
+  "Content-Type": "application/json; charset=utf-8",
+  "X-TVMax-Worker-Version": API_VERSION
 };
 
 // ============================================================
@@ -1314,6 +1317,18 @@ async function router(request, env) {
     return new Response(null, {
       status: 204,
       headers: corsHeaders
+    });
+  }
+
+  // ----------------------------------------------------------
+  // VERSION
+  // ----------------------------------------------------------
+
+  if (pathname === "/api/version" && method === "GET") {
+    return json({
+      ok: true,
+      service: "Grupo TV MAX API",
+      version: API_VERSION
     });
   }
 
