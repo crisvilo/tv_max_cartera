@@ -78,7 +78,8 @@
       async signInWithPassword({email,password}){
         const r=await apiFetch('/api/auth/login',{method:'POST',body:JSON.stringify({email,password})});
         if(!r.ok) return {data:null,error:{message:r.body?.error||'Credenciales inválidas'}};
-        const token = r.body?.session?.access_token || r.body?.token || "";
+        const token = r.body?.session?.access_token || r.body?.access_token || r.body?.token;
+        if(!token) return {data:null,error:{message:'La API no devolvió el token de sesión'}};
         setToken(token);
         return {data:{session:{access_token:token,user:r.body.user},user:r.body.user},error:null};
       },
