@@ -129,37 +129,86 @@
   });
 
   function bindEvents() {
-    id("login-form").addEventListener("submit", login); id("register-form").addEventListener("submit", registerAdvisor); id("call-form").addEventListener("submit", registerCall); id("admin-call-form")?.addEventListener("submit", registerCallAdmin); id("seguimiento-form")?.addEventListener("submit", saveSeguimientoSurvey); id("servicio-form")?.addEventListener("submit", saveServicioSurvey);
-    id("btn-show-register").addEventListener("click", () => { id("auth-view").classList.add("hidden"); id("register-view").classList.remove("hidden"); });
-    id("btn-back-login").addEventListener("click", showAuthView); id("btn-logout").addEventListener("click", logout);
-    id("btn-menu").addEventListener("click", () => id("sidebar").classList.toggle("open")); id("btn-close-menu").addEventListener("click", closeSidebar);
-    id("filtroAsesor").addEventListener("input", renderAdvisorTable);
-    id("filtroAsesorDesde").addEventListener("change", renderAdvisorTable);
-    id("filtroAsesorHasta").addEventListener("change", renderAdvisorTable);
-    id("btn-limpiar-filtro-asesor").addEventListener("click", clearAsesorFilters);
-    id("whatsappEnviado").addEventListener("change", toggleWhatsappFields);
-    id("compromisoPago").addEventListener("change", toggleCompromisoField);
-    id("adminCallWhatsapp")?.addEventListener("change", toggleAdminWhatsappFields);
-    id("adminCallCompromiso")?.addEventListener("change", toggleAdminCompromisoField);
-    ["filtroAdminTexto","filtroLlamadaAdmin","filtroTipoGestionAdmin","filtroCompromisoAdmin","filtroPagoAdmin","filtroZonaAdmin","filtroDesdeAdmin","filtroHastaAdmin"].forEach(x => { id(x).addEventListener("input", renderAdmin); id(x).addEventListener("change", renderAdmin); });
-    id("ms-asesores-toggle").addEventListener("click", (e) => { e.stopPropagation(); id("ms-asesores-panel").classList.toggle("hidden"); });
-    id("ms-asesores-all").addEventListener("click", () => { asesoresSeleccionados = []; syncAsesoresChecklist(); renderAdmin(); });
-    id("ms-asesores-none").addEventListener("click", () => { asesoresSeleccionados = advisors.map(a => a.id); syncAsesoresChecklist(); renderAdmin(); });
-    document.addEventListener("click", (e) => { const panel = id("ms-asesores-panel"), box = id("ms-asesores"); if (panel && !panel.classList.contains("hidden") && box && !box.contains(e.target)) panel.classList.add("hidden"); });
-    id("btn-clear-filters").addEventListener("click", clearAdminFilters); id("btn-preview-report").addEventListener("click", () => previewReport()); id("btn-close-report-preview").addEventListener("click", closeReportPreview); id("btn-print-report").addEventListener("click", () => printReport()); id("btn-pdf-report").addEventListener("click", () => downloadPDF()); id("btn-excel-report").addEventListener("click", downloadExcel);
-    id("btn-preview-advisor-summary").addEventListener("click", () => previewReport(buildAdvisorSummaryReportHTML)); id("btn-print-advisor-summary").addEventListener("click", () => printReport(buildAdvisorSummaryReportHTML)); id("btn-pdf-advisor-summary").addEventListener("click", () => downloadPDF(buildAdvisorSummaryReportHTML,"resumen-llamadas-por-asesor")); id("btn-excel-advisor-summary").addEventListener("click", downloadAdvisorSummaryExcel);
-    id("admin-user-form").addEventListener("submit", saveAdminUser); id("admin-survey-form").addEventListener("submit", saveAdminSurvey); id("btn-cancel-user-edit").addEventListener("click", resetUserForm);
-    ["filtroEncuestaAsesor","filtroEncuestaDesde","filtroEncuestaHasta","filtroEncuestaTexto"].forEach(x => { if(id(x)){ id(x).addEventListener("input", renderSurveys); id(x).addEventListener("change", renderSurveys); }});
-    id("btn-clear-survey-filters").addEventListener("click", clearSurveyFilters);
-    id("btn-preview-survey-report").addEventListener("click", () => previewReport(buildSurveyReportHTML));
-    id("btn-print-survey-report").addEventListener("click", () => printReport(buildSurveyReportHTML));
-    id("btn-pdf-survey-report").addEventListener("click", () => downloadPDF(buildSurveyReportHTML,"reporte-encuestas-cartera"));
-    id("btn-excel-survey-report").addEventListener("click", downloadSurveyExcel);
-    id("config-form")?.addEventListener("submit", saveConfig); id("btn-remove-logo")?.addEventListener("click", removeLogo); id("change-password-form")?.addEventListener("submit", changePassword); id("btn-clear-password")?.addEventListener("click", clearPasswordForm);
-    id("btn-asesor-report").addEventListener("click", previewAdvisorReport); id("btn-asesor-print").addEventListener("click", printAdvisorReport); id("btn-asesor-pdf").addEventListener("click", downloadAdvisorPDF);
-    id("btn-download-backup").addEventListener("click", downloadBackup);
-    document.querySelectorAll("[data-hub-open]").forEach(b=>b.addEventListener("click",()=>{showView(b.dataset.hubOpen);setSectionMode(b.dataset.hubOpen,b.dataset.hubMode||"form");}));
-    document.querySelectorAll("[data-hub-back]").forEach(b=>b.addEventListener("click",()=>showView("vista-encuestas-hub")));
+    // Vinculación segura: un elemento ausente no debe detener el resto de botones.
+    const on = (selector, event, handler) => {
+      const el = id(selector);
+      if (el) el.addEventListener(event, handler);
+    };
+
+    on("login-form", "submit", login);
+    on("register-form", "submit", registerAdvisor);
+    on("call-form", "submit", registerCall);
+    on("admin-call-form", "submit", registerCallAdmin);
+    on("seguimiento-form", "submit", saveSeguimientoSurvey);
+    on("servicio-form", "submit", saveServicioSurvey);
+
+    on("btn-show-register", "click", () => { id("auth-view")?.classList.add("hidden"); id("register-view")?.classList.remove("hidden"); });
+    on("btn-back-login", "click", showAuthView);
+    on("btn-logout", "click", logout);
+    on("btn-menu", "click", () => id("sidebar")?.classList.toggle("open"));
+    on("btn-close-menu", "click", closeSidebar);
+
+    on("filtroAsesor", "input", renderAdvisorTable);
+    on("filtroAsesorDesde", "change", renderAdvisorTable);
+    on("filtroAsesorHasta", "change", renderAdvisorTable);
+    on("btn-limpiar-filtro-asesor", "click", clearAsesorFilters);
+    on("whatsappEnviado", "change", toggleWhatsappFields);
+    on("compromisoPago", "change", toggleCompromisoField);
+    on("adminCallWhatsapp", "change", toggleAdminWhatsappFields);
+    on("adminCallCompromiso", "change", toggleAdminCompromisoField);
+
+    ["filtroAdminTexto","filtroLlamadaAdmin","filtroTipoGestionAdmin","filtroCompromisoAdmin","filtroPagoAdmin","filtroZonaAdmin","filtroDesdeAdmin","filtroHastaAdmin"].forEach(x => {
+      on(x, "input", renderAdmin);
+      on(x, "change", renderAdmin);
+    });
+
+    on("ms-asesores-toggle", "click", (e) => { e.stopPropagation(); id("ms-asesores-panel")?.classList.toggle("hidden"); });
+    on("ms-asesores-all", "click", () => { asesoresSeleccionados = []; syncAsesoresChecklist(); renderAdmin(); });
+    on("ms-asesores-none", "click", () => { asesoresSeleccionados = advisors.map(a => a.id); syncAsesoresChecklist(); renderAdmin(); });
+    document.addEventListener("click", (e) => {
+      const panel = id("ms-asesores-panel"), box = id("ms-asesores");
+      if (panel && !panel.classList.contains("hidden") && box && !box.contains(e.target)) panel.classList.add("hidden");
+    });
+
+    on("btn-clear-filters", "click", clearAdminFilters);
+    on("btn-preview-report", "click", () => previewReport());
+    on("btn-close-report-preview", "click", closeReportPreview);
+    on("btn-print-report", "click", () => printReport());
+    on("btn-pdf-report", "click", () => downloadPDF());
+    on("btn-excel-report", "click", downloadExcel);
+
+    on("btn-preview-advisor-summary", "click", () => previewReport(buildAdvisorSummaryReportHTML));
+    on("btn-print-advisor-summary", "click", () => printReport(buildAdvisorSummaryReportHTML));
+    on("btn-pdf-advisor-summary", "click", () => downloadPDF(buildAdvisorSummaryReportHTML,"resumen-llamadas-por-asesor"));
+    on("btn-excel-advisor-summary", "click", downloadAdvisorSummaryExcel);
+
+    on("admin-user-form", "submit", saveAdminUser);
+    on("admin-survey-form", "submit", saveAdminSurvey);
+    on("btn-cancel-user-edit", "click", resetUserForm);
+    ["filtroEncuestaAsesor","filtroEncuestaDesde","filtroEncuestaHasta","filtroEncuestaTexto"].forEach(x => {
+      on(x, "input", renderSurveys);
+      on(x, "change", renderSurveys);
+    });
+    on("btn-clear-survey-filters", "click", clearSurveyFilters);
+    on("btn-preview-survey-report", "click", () => previewReport(buildSurveyReportHTML));
+    on("btn-print-survey-report", "click", () => printReport(buildSurveyReportHTML));
+    on("btn-pdf-survey-report", "click", () => downloadPDF(buildSurveyReportHTML,"reporte-encuestas-cartera"));
+    on("btn-excel-survey-report", "click", downloadSurveyExcel);
+
+    on("config-form", "submit", saveConfig);
+    on("btn-remove-logo", "click", removeLogo);
+    on("change-password-form", "submit", changePassword);
+    on("btn-clear-password", "click", clearPasswordForm);
+    on("btn-asesor-report", "click", previewAdvisorReport);
+    on("btn-asesor-print", "click", printAdvisorReport);
+    on("btn-asesor-pdf", "click", downloadAdvisorPDF);
+    on("btn-download-backup", "click", downloadBackup);
+
+    document.querySelectorAll("[data-hub-open]").forEach(b => b.addEventListener("click", () => {
+      showView(b.dataset.hubOpen);
+      setSectionMode(b.dataset.hubOpen, b.dataset.hubMode || "form");
+    }));
+    document.querySelectorAll("[data-hub-back]").forEach(b => b.addEventListener("click", () => showView("vista-encuestas-hub")));
   }
 
   function toggleWhatsappFields(){const on=id("whatsappEnviado").value==="true";id("whatsappMensajeGroup").classList.toggle("hidden",!on);id("whatsappRespuestaGroup").classList.toggle("hidden",!on);}
