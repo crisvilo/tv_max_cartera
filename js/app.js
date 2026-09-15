@@ -227,7 +227,7 @@
     const [cr,ar,er,sgr,srr]=await Promise.all([
       sbClient.from("llamadascr").select(`*, perfilescr:asesor_id (id,nombre,apellido,zona,email,activo)`).order("fecha_llamada",{ascending:false}).order("id",{ascending:false}),
       sbClient.from("perfilescr").select("*").eq("rol","asesor").order("nombre",{ascending:true}).order("apellido",{ascending:true}),
-      sbClient.from("encuestascr").select(`*, perfilescr:asesor_id (id,nombre,apellido,email,rol,activo), llamadascr:llamada_id (id,cliente,llamada,zona,fecha_llamada,asesor_id,perfilescr:asesor_id (id,nombre,apellido,email))`).order("id",{ascending:false}),
+      sbClient.from("encuestascr").select(`*, perfilescr:asesor_id (id,nombre,apellido,email,rol,activo)`).order("id",{ascending:false}),
       sbClient.from("encuestas_seguimientocr").select("*").order("id",{ascending:false}),
       sbClient.from("encuestas_serviciocr").select("*").order("id",{ascending:false})
     ]);
@@ -355,7 +355,7 @@
     };
     if(!enc.codigo_usuario){showToast("Escribe el nombre del cliente o usuario encuestado.",true);return;}
     setButtonBusy(e.submitter,true,"Guardando...");
-    const {data,error}=await sbClient.from("encuestascr").insert(enc).select(`*, perfilescr:asesor_id (id,nombre,apellido,email,rol,activo), llamadascr:llamada_id (id,cliente,llamada,zona,fecha_llamada,asesor_id,perfilescr:asesor_id (id,nombre,apellido,email))`).single();
+    const {data,error}=await sbClient.from("encuestascr").insert(enc).select(`*, perfilescr:asesor_id (id,nombre,apellido,email,rol,activo)`).single();
     setButtonBusy(e.submitter,false,"Guardar encuesta");
     if(error){console.error(error);showToast(error.message||"No fue posible guardar la encuesta.",true);return;}
     surveys.unshift(data); populateSurveyFilters(); renderSurveys(); resetAdminSurveyForm(); showToast("Encuesta del administrador guardada correctamente.");
@@ -792,7 +792,6 @@ ${sers}
       if(!window.XLSX){showToast("No se pudo cargar el módulo de Excel.",true);return;}
       const filtered=getFilteredSurveys();
       const detail=filtered.map(s=>{
-        const a=s.perfilescr||{},l=s.llamadascr||{};
         return {
           "Fecha":surveyDate(s),"Asesor":surveyAdvisorName(s),
           "01. Usuario encuestado":s.codigo_usuario||"","02. Servicio":s.calificacion_servicio||"",
