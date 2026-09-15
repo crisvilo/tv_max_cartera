@@ -155,7 +155,7 @@
     id("btn-print-survey-report").addEventListener("click", () => printReport(buildSurveyReportHTML));
     id("btn-pdf-survey-report").addEventListener("click", () => downloadPDF(buildSurveyReportHTML,"reporte-encuestas-cartera"));
     id("btn-excel-survey-report").addEventListener("click", downloadSurveyExcel);
-    id("config-form").addEventListener("submit", saveConfig); id("btn-remove-logo").addEventListener("click", removeLogo); id("change-password-form").addEventListener("submit", changePassword); id("btn-clear-password").addEventListener("click", clearPasswordForm);
+    id("config-form")?.addEventListener("submit", saveConfig); id("btn-remove-logo")?.addEventListener("click", removeLogo); id("change-password-form")?.addEventListener("submit", changePassword); id("btn-clear-password")?.addEventListener("click", clearPasswordForm);
     id("btn-asesor-report").addEventListener("click", previewAdvisorReport); id("btn-asesor-print").addEventListener("click", printAdvisorReport); id("btn-asesor-pdf").addEventListener("click", downloadAdvisorPDF);
     id("btn-download-backup").addEventListener("click", downloadBackup);
     document.querySelectorAll("[data-hub-open]").forEach(b=>b.addEventListener("click",()=>{showView(b.dataset.hubOpen);setSectionMode(b.dataset.hubOpen,b.dataset.hubMode||"form");}));
