@@ -12,7 +12,7 @@
  * cambió y seguirá usando la versión guardada en caché, aunque tú sí
  * hayas actualizado app.js o styles.css.
  */
-const CACHE_VERSION = 'v9';
+const CACHE_VERSION = 'v10';
 const CACHE_NAME = `cartera-cache-${CACHE_VERSION}`;
 
 // Archivos propios de la app (mismo origen) que se guardan como respaldo
