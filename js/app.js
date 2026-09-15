@@ -78,14 +78,16 @@
       async signInWithPassword({email,password}){
         const r=await apiFetch('/api/auth/login',{method:'POST',body:JSON.stringify({email,password})});
         if(!r.ok) return {data:null,error:{message:r.body?.error||'Credenciales inválidas'}};
-        setToken(r.body.token);
-        return {data:{session:{access_token:r.body.token,user:r.body.user},user:r.body.user},error:null};
+        const accessToken = r.body?.session?.access_token || r.body?.token || "";
+        setToken(accessToken);
+        return {data:{session:accessToken?{access_token:accessToken,user:r.body.user}:null,user:r.body.user},error:null};
       },
       async signUp({email,password,options={}}){
         const r=await apiFetch('/api/auth/register',{method:'POST',body:JSON.stringify({email,password,...(options.data||{})})});
         if(!r.ok) return {data:null,error:{message:r.body?.error||'No fue posible registrar el usuario'}};
-        if(r.body.token) setToken(r.body.token);
-        return {data:{session:r.body.token?{access_token:r.body.token,user:r.body.user}:null,user:r.body.user},error:null};
+        const accessToken = r.body?.session?.access_token || r.body?.token || "";
+        if(accessToken) setToken(accessToken);
+        return {data:{session:accessToken?{access_token:accessToken,user:r.body.user}:null,user:r.body.user},error:null};
       },
       async signOut(){ setToken(""); return {error:null}; },
       onAuthStateChange(callback){

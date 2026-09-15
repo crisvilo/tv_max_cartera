@@ -9,8 +9,6 @@ import { neon } from "@neondatabase/serverless";
 // CONFIGURACIÓN GENERAL
 // ============================================================
 
-const API_VERSION = "neon-login-fix-2026-09-15-v2";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
@@ -18,10 +16,12 @@ const corsHeaders = {
   "Access-Control-Max-Age": "86400"
 };
 
+const WORKER_VERSION = "neon-login-fix-2026-09-15-v3";
+
 const jsonHeaders = {
   ...corsHeaders,
   "Content-Type": "application/json; charset=utf-8",
-  "X-TVMax-Worker-Version": API_VERSION
+  "x-tvmax-worker-version": WORKER_VERSION
 };
 
 // ============================================================
@@ -171,20 +171,38 @@ async function hashPassword(password, saltBytes = null) {
 // ============================================================
 
 async function verifyPassword(password, storedHash) {
-  if (!storedHash) {
-    return false;
-  }
-
-  const parts = String(storedHash).split(":");
-
-  if (parts.length !== 2) {
-    return false;
-  }
-
-  const saltBase64 = parts[0];
-  const storedPasswordHash = parts[1];
+  if (!storedHash) return false;
 
   try {
+    let saltBase64 = "";
+    let storedPasswordHash = "";
+    let iterations = 210000;
+
+    const raw = String(storedHash).trim();
+
+    // Formato principal: salt:hash
+    if (raw.includes(":")) {
+      const parts = raw.split(":");
+      if (parts.length === 2) {
+        [saltBase64, storedPasswordHash] = parts;
+      }
+    }
+
+    // También acepta JSON: {salt, hash, iterations?}
+    if (!saltBase64 || !storedPasswordHash) {
+      try {
+        const parsed = JSON.parse(raw);
+        saltBase64 = parsed.salt || parsed.saltBase64 || "";
+        storedPasswordHash = parsed.hash || parsed.password_hash || "";
+        iterations = Number(parsed.iterations || 210000);
+      } catch (_) {
+        // Formato no reconocido.
+      }
+    }
+
+    if (!saltBase64 || !storedPasswordHash) return false;
+    if (!Number.isInteger(iterations) || iterations < 1) iterations = 210000;
+
     const saltBytes = base64UrlDecode(saltBase64);
 
     const key = await crypto.subtle.importKey(
@@ -199,25 +217,17 @@ async function verifyPassword(password, storedHash) {
       {
         name: "PBKDF2",
         salt: saltBytes,
-        iterations: 210000,
+        iterations,
         hash: "SHA-256"
       },
       key,
       256
     );
 
-    const generatedHashBytes = new Uint8Array(bits);
-
-    let binary = "";
-
-    for (const byte of generatedHashBytes) {
-      binary += String.fromCharCode(byte);
-    }
-
-    const generatedHashStandard = btoa(binary);
+    const generatedHash = base64UrlEncode(new Uint8Array(bits));
 
     return constantTimeEqual(
-      normalizeBase64(generatedHashStandard),
+      normalizeBase64(generatedHash),
       normalizeBase64(storedPasswordHash)
     );
   } catch (error) {
@@ -1306,6 +1316,11 @@ async function handleDeleteTable(request, env, table, id) {
 
 async function router(request, env) {
   const url = new URL(request.url);
+
+  if (url.pathname === "/api/version" && request.method === "GET") {
+    return json({ ok: true, version: WORKER_VERSION, service: "Grupo TV MAX API" });
+  }
+
   const pathname = url.pathname;
   const method = request.method.toUpperCase();
 
@@ -1317,18 +1332,6 @@ async function router(request, env) {
     return new Response(null, {
       status: 204,
       headers: corsHeaders
-    });
-  }
-
-  // ----------------------------------------------------------
-  // VERSION
-  // ----------------------------------------------------------
-
-  if (pathname === "/api/version" && method === "GET") {
-    return json({
-      ok: true,
-      service: "Grupo TV MAX API",
-      version: API_VERSION
     });
   }
 
