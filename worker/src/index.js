@@ -5506,7 +5506,7 @@ var corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Max-Age": "86400"
 };
-var WORKER_VERSION = "password-management-2026-09-15-v21";
+var WORKER_VERSION = "neon-login-fix-2026-09-15-v4";
 var jsonHeaders = {
   ...corsHeaders,
   "Content-Type": "application/json; charset=utf-8"
@@ -5588,7 +5588,7 @@ async function hashPassword(password, saltBytes = null) {
     {
       name: "PBKDF2",
       salt,
-      iterations: 21e4,
+      iterations: 100000,
       hash: "SHA-256"
     },
     key,
@@ -5624,7 +5624,7 @@ async function verifyPassword(password, storedHash) {
       {
         name: "PBKDF2",
         salt: saltBytes,
-        iterations: 21e4,
+        iterations: 100000,
         hash: "SHA-256"
       },
       key,
@@ -5981,60 +5981,6 @@ async function handleAuthTest(request, env) {
   });
 }
 __name(handleAuthTest, "handleAuthTest");
-async function handleChangePassword(request, env) {
-  try {
-    const auth = await requireAuth(request, env);
-    if (!auth) return errorResponse("No autenticado", 401);
-    const body = await request.json();
-    const currentPassword = String(body.currentPassword || "");
-    const newPassword = String(body.newPassword || "");
-    const confirmPassword = String(body.confirmPassword || "");
-    if (!currentPassword || !newPassword || !confirmPassword) return errorResponse("Completa todos los campos de contraseña", 400);
-    if (newPassword.length < 6) return errorResponse("La nueva contraseña debe tener mínimo 6 caracteres", 400);
-    if (newPassword !== confirmPassword) return errorResponse("Las nuevas contraseñas no coinciden", 400);
-    const sql = getDB(env);
-    const users = await sql`SELECT id, password_hash, activo FROM perfilescr WHERE id = ${auth.sub} LIMIT 1`;
-    if (!users || users.length === 0) return errorResponse("Usuario no encontrado", 404);
-    if (!users[0].activo) return errorResponse("Usuario inactivo", 403);
-    const valid = await verifyPassword(currentPassword, users[0].password_hash);
-    if (!valid) return errorResponse("La contraseña actual no es correcta", 401);
-    const passwordData = await hashPassword(newPassword);
-    const passwordHash = `${passwordData.salt}:${passwordData.hash}`;
-    await sql`UPDATE perfilescr SET password_hash = ${passwordHash}, updated_at = NOW() WHERE id = ${auth.sub}`;
-    return json({ ok: true, message: "Contraseña actualizada correctamente" });
-  } catch (error) {
-    console.error("CHANGE PASSWORD ERROR:", error);
-    return errorResponse("Error cambiando la contraseña", 500, error.message);
-  }
-}
-__name(handleChangePassword, "handleChangePassword");
-
-async function handleAdminChangePassword(request, env, userId) {
-  try {
-    const auth = await requireAuth(request, env);
-    if (!auth) return errorResponse("No autenticado", 401);
-    if (auth.rol !== "administrador" && auth.rol !== "admin") return errorResponse("No tienes permisos", 403);
-    const body = await request.json();
-    const newPassword = String(body.newPassword || "");
-    const confirmPassword = String(body.confirmPassword || "");
-    if (!newPassword || !confirmPassword) return errorResponse("La nueva contraseña es obligatoria", 400);
-    if (newPassword.length < 6) return errorResponse("La contraseña debe tener mínimo 6 caracteres", 400);
-    if (newPassword !== confirmPassword) return errorResponse("Las contraseñas no coinciden", 400);
-    const sql = getDB(env);
-    const users = await sql`SELECT id, nombre, apellido, rol, activo FROM perfilescr WHERE id = ${userId} LIMIT 1`;
-    if (!users || users.length === 0) return errorResponse("Asesor no encontrado", 404);
-    if (users[0].rol !== "asesor") return errorResponse("Solo se pueden restablecer contraseñas de asesores", 400);
-    const passwordData = await hashPassword(newPassword);
-    const passwordHash = `${passwordData.salt}:${passwordData.hash}`;
-    await sql`UPDATE perfilescr SET password_hash = ${passwordHash}, updated_at = NOW() WHERE id = ${userId}`;
-    return json({ ok: true, message: "Contraseña del asesor actualizada correctamente" });
-  } catch (error) {
-    console.error("ADMIN CHANGE PASSWORD ERROR:", error);
-    return errorResponse("Error cambiando la contraseña del asesor", 500, error.message);
-  }
-}
-__name(handleAdminChangePassword, "handleAdminChangePassword");
-
 async function handleRegister(request, env) {
   try {
     const auth = await requireAuth(request, env);
@@ -6185,30 +6131,6 @@ async function handleUsers(request, env) {
   }
 }
 __name(handleUsers, "handleUsers");
-async function handleAdminUpdateUser(request, env, userId) {
-  try {
-    const auth = await requireAuth(request, env);
-    if (!auth) return errorResponse("No autenticado", 401);
-    if (auth.rol !== "administrador" && auth.rol !== "admin") return errorResponse("No tienes permisos", 403);
-    const body = await request.json();
-    const allowed = ["nombre","apellido","documento","telefono","zona","email","meta_mensual"];
-    const entries = Object.entries(body).filter(([key]) => allowed.includes(key));
-    if (!entries.length) return errorResponse("No hay datos para actualizar", 400);
-    if (entries.some(([k]) => k === "email" && !String(body.email || "").trim())) return errorResponse("El correo es obligatorio", 400);
-    const sql = getDB(env);
-    const values = entries.map(([, value]) => value);
-    const assignments = entries.map(([key], i) => `${key} = $${i + 1}`);
-    values.push(userId);
-    const result = await sql.query(`UPDATE perfilescr SET ${assignments.join(", ")}, updated_at = NOW() WHERE id = $${values.length} AND rol = 'asesor' RETURNING id,nombre,apellido,documento,telefono,zona,email,rol,meta_mensual,activo,created_at,updated_at`, values);
-    if (!result || result.length === 0) return errorResponse("Asesor no encontrado", 404);
-    return json({ ok: true, user: result[0] });
-  } catch (error) {
-    console.error("ADMIN UPDATE USER ERROR:", error);
-    return errorResponse("Error actualizando asesor", 500, error.message);
-  }
-}
-__name(handleAdminUpdateUser, "handleAdminUpdateUser");
-
 async function handleToggleUser(request, env, userId) {
   try {
     const auth = await requireAuth(request, env);
@@ -6585,19 +6507,8 @@ async function router(request, env) {
   if (pathname === "/api/auth/register" && method === "POST") {
     return await handleRegister(request, env);
   }
-  if (pathname === "/api/auth/change-password" && method === "POST") {
-    return await handleChangePassword(request, env);
-  }
   if (pathname === "/api/admin/users" && method === "GET") {
     return await handleUsers(request, env);
-  }
-  const adminPasswordMatch = pathname.match(/^\/api\/admin\/users\/([^/]+)\/password$/);
-  if (adminPasswordMatch && method === "PATCH") {
-    return await handleAdminChangePassword(request, env, adminPasswordMatch[1]);
-  }
-  const adminUserMatch = pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
-  if (adminUserMatch && method === "PATCH") {
-    return await handleAdminUpdateUser(request, env, adminUserMatch[1]);
   }
   const toggleMatch = pathname.match(
     /^\/api\/admin\/users\/([^/]+)\/toggle$/
