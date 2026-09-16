@@ -95,6 +95,16 @@
 
       <div class="card table-card"><div class="card-heading table-heading"><div><span class="section-kicker">HISTORIAL</span><h3>Mis llamadas</h3><p class="muted">Filtra por fecha para descargar tu informe diario.</p></div><div class="table-tools"><input id="filtroAsesor" type="search" placeholder="Buscar cliente, zona u observación..."><input id="filtroAsesorDesde" type="date" title="Desde"><input id="filtroAsesorHasta" type="date" title="Hasta"><button id="btn-limpiar-filtro-asesor" class="btn-secondary" type="button">Limpiar</button><button id="btn-asesor-report" class="btn-secondary" type="button">👁 Ver mi reporte</button><button id="btn-asesor-print" class="btn-secondary" type="button">🖨 Imprimir</button><button id="btn-asesor-pdf" class="btn-primary" type="button">📄 Descargar PDF</button></div></div><div class="table-wrapper"><table><thead><tr><th>ID</th><th>Cliente</th><th>Llamada</th><th>Tipo de llamada</th><th>Zona</th><th>WhatsApp</th><th>Compromiso</th><th>Pago</th><th>Fecha</th></tr></thead><tbody id="tabla-asesor"></tbody></table></div></div>
 
+      <div class="card form-card password-card">
+        <div class="card-heading"><div><span class="section-kicker">SEGURIDAD</span><h3>Cambiar mi contraseña</h3><p class="muted">Actualiza tu contraseña de acceso. Debes conocer la contraseña actual.</p></div></div>
+        <form id="change-password-form" class="register-grid">
+          <div class="form-group"><label for="current-password">Contraseña actual</label><input id="current-password" type="password" autocomplete="current-password" required></div>
+          <div class="form-group"><label for="new-password">Nueva contraseña</label><input id="new-password" type="password" minlength="6" autocomplete="new-password" required></div>
+          <div class="form-group"><label for="confirm-new-password">Confirmar nueva contraseña</label><input id="confirm-new-password" type="password" minlength="6" autocomplete="new-password" required></div>
+          <div class="form-actions form-actions-wide"><button id="btn-clear-password" type="button" class="btn-secondary">Limpiar</button><button type="submit" class="btn-primary">Cambiar contraseña</button></div>
+        </form>
+      </div>
+
       <div class="card table-card"><div class="card-heading"><div><span class="section-kicker">SEGUIMIENTO</span><h3>Veces que he contactado a cada cliente este mes</h3></div></div><div class="table-wrapper"><table><thead><tr><th>Cliente</th><th>Llamadas</th><th>Contestadas</th><th>No contestadas</th><th>Compromisos</th><th>Pagos</th></tr></thead><tbody id="tabla-seguimiento-asesor"></tbody></table></div></div>
     </section>
 
