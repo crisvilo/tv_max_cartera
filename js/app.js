@@ -115,6 +115,7 @@
   const TIPOS_GESTION = ["Gestión reporte a Data Crédito y abogados", "Gestión lista de suspensión", "Gestión recuperación de equipo", "Gestión ofreciendo servicio de la empresa", "Gestión actualización de información"];
   const META_POR_DEFECTO = 500;
   let currentUser = null, currentProfile = null, calls = [], advisors = [], surveys = [], seguimientoSurveys = [], servicioSurveys = [], config = { color_principal: "#0ea5e9", logo_url: "" };
+  let advisorDashboardStats = {};
   let asesoresSeleccionados = []; // [] = todos los asesores
 
   document.addEventListener("DOMContentLoaded", async () => {
@@ -181,11 +182,25 @@
     on("admin-user-form", "submit", saveAdminUser);
     on("admin-survey-form", "submit", saveAdminSurvey);
     on("btn-cancel-user-edit", "click", resetUserForm);
-    ["filtroEncuestaAsesor","filtroEncuestaDesde","filtroEncuestaHasta","filtroEncuestaTexto"].forEach(x => {
-      on(x, "input", renderSurveys);
-      on(x, "change", renderSurveys);
-    });
+    on("filtroEncuestaAsesor", "change", loadGeneralSurveys);
+    on("filtroEncuestaDesde", "change", loadGeneralSurveys);
+    on("filtroEncuestaHasta", "change", loadGeneralSurveys);
+    bindDebouncedTextFilter("filtroEncuestaTexto", loadGeneralSurveys);
     on("btn-clear-survey-filters", "click", clearSurveyFilters);
+
+    on("seg-filter-asesor", "change", loadSeguimientoSurveys);
+    on("seg-filter-from", "change", loadSeguimientoSurveys);
+    on("seg-filter-to", "change", loadSeguimientoSurveys);
+    bindDebouncedTextFilter("seg-filter-user", loadSeguimientoSurveys);
+    on("seg-filter-clear", "click", clearSegFilters);
+
+    on("srv-filter-asesor", "change", loadServicioSurveys);
+    on("srv-filter-from", "change", loadServicioSurveys);
+    on("srv-filter-to", "change", loadServicioSurveys);
+    bindDebouncedTextFilter("srv-filter-user", loadServicioSurveys);
+    on("srv-filter-clear", "click", clearSrvFilters);
+
+    bindDebouncedTextFilter("filtroAsesorBuscar", renderUsers);
     on("btn-preview-survey-report", "click", () => previewReport(buildSurveyReportHTML));
     on("btn-print-survey-report", "click", () => printReport(buildSurveyReportHTML));
     on("btn-pdf-survey-report", "click", () => downloadPDF(buildSurveyReportHTML,"reporte-encuestas-cartera"));
@@ -263,15 +278,39 @@
     calls=r.body?.data||[];renderAdvisorTable();renderSeguimientoAsesor();
   }
 
+  async function loadSurveyCollection(type){
+    const map={
+      general:{advisor:"filtroEncuestaAsesor",from:"filtroEncuestaDesde",to:"filtroEncuestaHasta",client:"filtroEncuestaTexto"},
+      seguimiento:{advisor:"seg-filter-asesor",from:"seg-filter-from",to:"seg-filter-to",client:"seg-filter-user"},
+      servicio:{advisor:"srv-filter-asesor",from:"srv-filter-from",to:"srv-filter-to",client:"srv-filter-user"}
+    };
+    const f=map[type],qs=new URLSearchParams();
+    qs.set("tipo",type);
+    const advisor=f.advisor&&isCurrentAdmin()?value(f.advisor):"";
+    const from=f.from?value(f.from):"",to=f.to?value(f.to):"",client=f.client?value(f.client):"";
+    if(advisor)qs.set("asesor",advisor); if(from)qs.set("from",from); if(to)qs.set("to",to); if(client)qs.set("cliente",client);
+    const r=await apiFetch(`/api/surveys?${qs.toString()}`);
+    if(!r.ok){console.error("SURVEY LOAD ERROR:",r.body);showToast("No fue posible cargar las encuestas.",true);return false;}
+    const data=r.body?.data||[];
+    if(type==="general")surveys=data;
+    else if(type==="seguimiento")seguimientoSurveys=data;
+    else servicioSurveys=data;
+    return true;
+  }
+  async function loadGeneralSurveys(){if(await loadSurveyCollection("general"))renderSurveys();}
+  async function loadSeguimientoSurveys(){if(await loadSurveyCollection("seguimiento"))renderSeguimientoSurveys();}
+  async function loadServicioSurveys(){if(await loadSurveyCollection("servicio"))renderServicioSurveys();}
+  function bindDebouncedTextFilter(selector,handler){const el=id(selector);if(!el)return;let timer;el.addEventListener("input",()=>{clearTimeout(timer);timer=setTimeout(handler,450);});}
+
   async function loadAdvisorData(){
     const [cr,sr,sgr,srr]=await Promise.all([
       apiFetch(`/api/calls`),
-      sbClient.from("encuestascr").select(`*, perfilescr:asesor_id (id,nombre,apellido,zona,email,activo)`).eq("asesor_id",currentUser.id).order("id",{ascending:false}),
-      sbClient.from("encuestas_seguimientocr").select("*").eq("asesor_id",currentUser.id).order("id",{ascending:false}),
-      sbClient.from("encuestas_serviciocr").select("*").eq("asesor_id",currentUser.id).order("id",{ascending:false})
+      loadSurveyCollection("general"),
+      loadSurveyCollection("seguimiento"),
+      loadSurveyCollection("servicio")
     ]);
     if(!cr.ok){console.error(cr.body);showToast("No fue posible cargar tus llamadas.",true);return;}
-    calls=cr.body?.data||[];surveys=sr.data||[];seguimientoSurveys=sgr.data||[];servicioSurveys=srr.data||[];
+    calls=cr.body?.data||[];
     applyAdvisorProfile();renderAdvisorTable();await loadAdvisorDashboard();renderSeguimientoAsesor();renderSurveys();renderSeguimientoSurveys();renderServicioSurveys();
   }
 
@@ -283,15 +322,13 @@
   }
 
   async function loadAdminData(){
-    const [ar,er,sgr,srr]=await Promise.all([
-      sbClient.from("perfilescr").select("*").eq("rol","asesor").order("nombre",{ascending:true}).order("apellido",{ascending:true}),
-      sbClient.from("encuestascr").select(`*, perfilescr:asesor_id (id,nombre,apellido,email,rol,activo)`).order("id",{ascending:false}),
-      sbClient.from("encuestas_seguimientocr").select("*").order("id",{ascending:false}),
-      sbClient.from("encuestas_serviciocr").select("*").order("id",{ascending:false})
+    const [ar]=await Promise.all([
+      sbClient.from("perfilescr").select("*").eq("rol","asesor").order("nombre",{ascending:true}).order("apellido",{ascending:true})
     ]);
-    if(ar.error){console.error(ar.error);showToast("No fue posible cargar los asesores.",true);return;}if(er.error||sgr.error||srr.error){console.error(er.error||sgr.error||srr.error);showToast("No fue posible cargar las encuestas. Ejecuta el nuevo SQL de migración.",true);return;}
-    advisors=ar.data||[];surveys=er.data||[];seguimientoSurveys=sgr.data||[];servicioSurveys=srr.data||[];populateAdminFilters();populateSurveyFilters();renderSurveys();renderSeguimientoSurveys();renderServicioSurveys();renderUsers();renderConfig();
-    await loadAdminCalls();await loadAdminDashboard();
+    if(ar.error){console.error(ar.error);showToast("No fue posible cargar los asesores.",true);return;}
+    advisors=ar.data||[];populateAdminFilters();populateSurveyFilters();renderUsers();renderConfig();
+    await Promise.all([loadGeneralSurveys(),loadSeguimientoSurveys(),loadServicioSurveys(),loadAdminCalls(),loadAdminDashboard()]);
+    renderSurveys();renderSeguimientoSurveys();renderServicioSurveys();renderUsers();
   }
 
   async function registerCall(e){
@@ -299,8 +336,7 @@
     const whatsapp=id("whatsappEnviado").value==="true", compromiso=id("compromisoPago").value==="true", pago=id("pago").value==="true";
     if(compromiso && !id("fechaCompromiso").value){showToast("Selecciona la fecha del compromiso de pago.",true);return;}
     const zonaSeleccionada=value("zona"); if(!ZONAS.includes(zonaSeleccionada)){showToast("Selecciona una zona válida de la lista.",true);return;}
-    const tipoGestionSeleccionado=value("tipoGestion");
-    if(!tipoGestionSeleccionado){showToast("Selecciona el tipo de gestión realizada.",true);return;}
+    const tipoGestionSeleccionado=value("tipoGestion") || "Sin especificar";
     const llamadaSeleccionada=value("tipoLlamada");
     const tipoLlamada=LLAMADA_TYPES.includes(llamadaSeleccionada)?llamadaSeleccionada:"Sin especificar";
     const row={asesor_id:currentUser.id,cliente:value("cliente"),llamada:tipoLlamada,tipo_gestion:tipoGestionSeleccionado,zona:zonaSeleccionada,whatsapp_enviado:whatsapp,whatsapp_mensaje:whatsapp?(value("whatsappMensaje")||null):null,whatsapp_respuesta:whatsapp?(value("whatsappRespuesta")||null):null,compromiso_pago:compromiso,fecha_compromiso:compromiso?id("fechaCompromiso").value:null,pago:pago,observaciones:value("observaciones")||null,fecha_llamada:id("fechaLlamada").value};
@@ -317,8 +353,7 @@
     const whatsapp=id("adminCallWhatsapp").value==="true", compromiso=id("adminCallCompromiso").value==="true", pago=id("adminCallPago").value==="true";
     if(compromiso && !id("adminCallFechaCompromiso").value){showToast("Selecciona la fecha del compromiso de pago.",true);return;}
     const zonaSeleccionada=value("adminCallZona"); if(!ZONAS.includes(zonaSeleccionada)){showToast("Selecciona una zona válida de la lista.",true);return;}
-    const tipoGestionSeleccionado=value("adminCallTipoGestion");
-    if(!tipoGestionSeleccionado){showToast("Selecciona el tipo de gestión realizada.",true);return;}
+    const tipoGestionSeleccionado=value("adminCallTipoGestion") || "Sin especificar";
     const llamadaSeleccionada=value("adminCallLlamada");
     const tipoLlamada=LLAMADA_TYPES.includes(llamadaSeleccionada)?llamadaSeleccionada:"Sin especificar";
     const row={asesor_id:currentUser.id,cliente:value("adminCallCliente"),llamada:tipoLlamada,tipo_gestion:tipoGestionSeleccionado,zona:zonaSeleccionada,whatsapp_enviado:whatsapp,whatsapp_mensaje:whatsapp?(value("adminCallWhatsappMensaje")||null):null,whatsapp_respuesta:whatsapp?(value("adminCallWhatsappRespuesta")||null):null,compromiso_pago:compromiso,fecha_compromiso:compromiso?id("adminCallFechaCompromiso").value:null,pago:pago,observaciones:value("adminCallObservaciones")||null,fecha_llamada:id("adminCallFecha").value};
@@ -347,13 +382,14 @@
 
   function getFilteredAsesorCalls(){return calls;}
   function clearAsesorFilters(){id("filtroAsesorDesde").value="";id("filtroAsesorHasta").value="";loadAdvisorCalls();}
-  function renderAdvisorTable(){const tabla=id("tabla-asesor"),filtered=getFilteredAsesorCalls();tabla.innerHTML=filtered.length?filtered.map(c=>`<tr><td>#${c.id}</td><td>${escapeHTML(c.cliente)}</td><td>${llamadaBadge(c.llamada)}</td><td>${tipoGestionBadge(c.tipo_gestion)}</td><td>${escapeHTML(c.zona)}</td><td>${whatsappBadge(c)}</td><td>${compromisoCell(c)}</td><td>${pagoBadge(c.pago)}</td><td>${formatDate(c.fecha_llamada)}</td></tr>`).join(""):`<tr class="empty-row"><td colspan="9">${calls.length?"No se encontraron llamadas con los filtros seleccionados.":"No hay llamadas registradas."}</td></tr>`;updateAdvisorStats();}
+  function callId(c){const raw=c?.id ?? c?.ID ?? c?.llamada_id ?? "";return raw===""?"—":String(raw);}
+  function renderAdvisorTable(){const tabla=id("tabla-asesor"),filtered=getFilteredAsesorCalls();tabla.innerHTML=filtered.length?filtered.map(c=>`<tr><td>#${escapeHTML(callId(c))}</td><td>${escapeHTML(c.cliente)}</td><td>${llamadaBadge(c.llamada)}</td><td>${tipoGestionBadge(c.tipo_gestion)}</td><td>${escapeHTML(c.zona)}</td><td>${whatsappBadge(c)}</td><td>${compromisoCell(c)}</td><td>${pagoBadge(c.pago)}</td><td>${formatDate(c.fecha_llamada)}</td></tr>`).join(""):`<tr class="empty-row"><td colspan="9">${calls.length?"No se encontraron llamadas con los filtros seleccionados.":"No hay llamadas registradas."}</td></tr>`;updateAdvisorStats();}
   function updateAdvisorStats(){}
   function metaDe(p){const n=Number(p?.meta_mensual ?? p?.meta_llamadas);return Number.isFinite(n)&&n>0?n:META_POR_DEFECTO;}
   function metaPct(hechas,meta){return meta>0?Math.round(hechas/meta*100):0;}
   function updateAdvisorDashboard(){updateAdvisorStats();}
 
-  function renderAdmin(){const filtered=getFilteredAdminCalls();const summaryBody=id("tabla-admin");const detailBody=id("tabla-admin-detail");const by={};filtered.forEach(c=>{const a=c.perfilescr||{},name=[a.nombre,a.apellido].filter(Boolean).join(" ")||a.email||"—";const k=c.asesor_id||name;if(!by[k])by[k]={name,total:0,contestadas:0,no:0,whatsapp:0,compromisos:0,pagos:0,zones:new Set()};const g=by[k];g.total++;if(c.llamada==="Contestada")g.contestadas++;if(c.llamada==="No contestada")g.no++;if(c.whatsapp_enviado)g.whatsapp++;if(c.compromiso_pago)g.compromisos++;if(c.pago)g.pagos++;if(c.zona)g.zones.add(c.zona);});const rows=Object.values(by).sort((a,b)=>b.total-a.total);if(summaryBody)summaryBody.innerHTML=rows.length?rows.map(g=>`<tr><td><strong>${escapeHTML(g.name)}</strong></td><td>${g.total}</td><td><span class="metric-pill metric-ok">${g.contestadas}</span></td><td><span class="metric-pill metric-no">${g.no}</span></td><td><span class="metric-pill metric-wa">${g.whatsapp}</span></td><td>${g.compromisos}</td><td>${g.pagos}</td><td>${escapeHTML([...g.zones].join(", ")||"—")}</td></tr>`).join(""):'<tr class="empty-row"><td colspan="8">No hay llamadas con los filtros seleccionados.</td></tr>';if(detailBody)detailBody.innerHTML=filtered.length?filtered.map(c=>{const a=c.perfilescr||{},name=[a.nombre,a.apellido].filter(Boolean).join(" ")||"—";return `<tr><td>#${c.id}</td><td>${escapeHTML(name)}</td><td>${escapeHTML(c.cliente)}</td><td>${llamadaBadge(c.llamada)}</td><td>${tipoGestionBadge(c.tipo_gestion)}</td><td>${escapeHTML(c.zona)}</td><td>${whatsappBadge(c)}</td><td>${compromisoCell(c)}</td><td class="action-cell">${pagoBadge(c.pago)}<button class="btn-small" onclick="setPago(${c.id},${!c.pago})">${c.pago?"Quitar pago":"Marcar pago"}</button></td><td>${formatDate(c.fecha_llamada)}</td><td class="action-cell"><button class="btn-delete" onclick="deleteCall(${c.id})">Eliminar</button></td></tr>`;}).join(""):'<tr class="empty-row"><td colspan="11">No hay llamadas registradas.</td></tr>';setText("admin-result-count",`${filtered.length} llamada${filtered.length===1?"":"s"}`);renderSeguimientoAdmin();}
+  function renderAdmin(){const filtered=getFilteredAdminCalls();const summaryBody=id("tabla-admin");const detailBody=id("tabla-admin-detail");const by={};filtered.forEach(c=>{const a=c.perfilescr||{},name=[a.nombre,a.apellido].filter(Boolean).join(" ")||a.email||"—";const k=c.asesor_id||name;if(!by[k])by[k]={name,total:0,contestadas:0,no:0,whatsapp:0,compromisos:0,pagos:0,zones:new Set()};const g=by[k];g.total++;if(c.llamada==="Contestada")g.contestadas++;if(c.llamada==="No contestada")g.no++;if(c.whatsapp_enviado)g.whatsapp++;if(c.compromiso_pago)g.compromisos++;if(c.pago)g.pagos++;if(c.zona)g.zones.add(c.zona);});const rows=Object.values(by).sort((a,b)=>b.total-a.total);if(summaryBody)summaryBody.innerHTML=rows.length?rows.map(g=>`<tr><td><strong>${escapeHTML(g.name)}</strong></td><td>${g.total}</td><td><span class="metric-pill metric-ok">${g.contestadas}</span></td><td><span class="metric-pill metric-no">${g.no}</span></td><td><span class="metric-pill metric-wa">${g.whatsapp}</span></td><td>${g.compromisos}</td><td>${g.pagos}</td><td>${escapeHTML([...g.zones].join(", ")||"—")}</td></tr>`).join(""):'<tr class="empty-row"><td colspan="8">No hay llamadas con los filtros seleccionados.</td></tr>';if(detailBody)detailBody.innerHTML=filtered.length?filtered.map(c=>{const a=c.perfilescr||{},name=[a.nombre,a.apellido].filter(Boolean).join(" ")||"—";return `<tr><td>#${escapeHTML(callId(c))}</td><td>${escapeHTML(name)}</td><td>${escapeHTML(c.cliente)}</td><td>${llamadaBadge(c.llamada)}</td><td>${tipoGestionBadge(c.tipo_gestion)}</td><td>${escapeHTML(c.zona)}</td><td>${whatsappBadge(c)}</td><td>${compromisoCell(c)}</td><td class="action-cell">${pagoBadge(c.pago)}<button class="btn-small" onclick="setPago(${c.id},${!c.pago})">${c.pago?"Quitar pago":"Marcar pago"}</button></td><td>${formatDate(c.fecha_llamada)}</td><td class="action-cell"><button class="btn-delete" onclick="deleteCall(${c.id})">Eliminar</button></td></tr>`;}).join(""):'<tr class="empty-row"><td colspan="11">No hay llamadas registradas.</td></tr>';setText("admin-result-count",`${filtered.length} llamada${filtered.length===1?"":"s"}`);renderSeguimientoAdmin();}
    function getFilteredAdminCalls(){return calls;}
   function populateAdminFilters(){asesoresSeleccionados=asesoresSeleccionados.filter(aid=>advisors.some(a=>a.id===aid));syncAsesoresChecklist();}
   function syncAsesoresChecklist(){
@@ -378,7 +414,7 @@
   async function loadAdminDashboard(){
     const now=new Date(),from=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`,next=new Date(now.getFullYear(),now.getMonth()+1,1),to=`${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,"0")}-01`;
     const r=await apiFetch(`/api/dashboard/admin?from=${from}&to=${to}`);if(!r.ok){console.error(r.body);return;}
-    const d=r.body?.data||{},totals=d.totals||{},rows=d.advisors||[];setText("dash-total",totals.total||0);setText("dash-contestadas",totals.contestadas||0);setText("dash-nocontestadas",totals.no_contestadas||0);setText("dash-compromisos",totals.compromisos||0);setText("dash-pagos",totals.pagos||0);
+    const d=r.body?.data||{},totals=d.totals||{},rows=d.advisors||[];advisorDashboardStats=Object.fromEntries(rows.map(x=>[x.id,x]));setText("dash-total",totals.total||0);setText("dash-contestadas",totals.contestadas||0);setText("dash-nocontestadas",totals.no_contestadas||0);setText("dash-compromisos",totals.compromisos||0);setText("dash-pagos",totals.pagos||0);
     const metaTotal=advisors.filter(a=>a.activo!==false).reduce((acc,a)=>acc+metaDe(a),0),done=Number(totals.total||0),adminPct=metaPct(done,metaTotal);setText("dash-admin-goal",metaTotal);setText("dash-admin-goal-done",done);setText("dash-admin-goal-pct",`${adminPct}%`);const bar=id("dash-admin-goal-bar");if(bar)bar.style.width=`${Math.min(100,adminPct)}%`;setText("dash-admin-goal-month",new Date(now.getFullYear(),now.getMonth(),1).toLocaleDateString("es-CO",{month:"long",year:"numeric"}));
     const rowMap=new Map(rows.map(x=>[x.id,x]));id("dash-goals-list").innerHTML=advisors.filter(a=>a.activo!==false).map(a=>{const n=[a.nombre,a.apellido].filter(Boolean).join(" ")||a.email,r=rowMap.get(a.id)||{},count=Number(r.total||0),meta=metaDe(a),pct=metaPct(count,meta);return `<div class="goal-chart-row"><div class="goal-chart-head"><strong>${escapeHTML(n)}</strong><span>${count} de ${meta} llamadas · ${pct}%</span></div><div class="goal-track"><i style="width:${Math.min(100,pct)}%"></i></div></div>`;}).join("")||'<p class="muted">No hay asesores registrados.</p>';
     const counts=[{t:"Contestada",n:Number(totals.contestadas||0)},{t:"No contestada",n:Number(totals.no_contestadas||0)},{t:"Equivocada",n:Number(totals.equivocadas||0)},{t:"Compromisos",n:Number(totals.compromisos||0)},{t:"Pagos",n:Number(totals.pagos||0)}],max=Math.max(1,...counts.map(x=>x.n));id("dash-services-list").innerHTML=counts.map(x=>`<div class="mini-bar-row"><span>${x.t}</span><div><i style="width:${x.n/max*100}%"></i></div><strong>${x.n}</strong></div>`).join("");
@@ -389,7 +425,14 @@
     const now=new Date(),from=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`,next=new Date(now.getFullYear(),now.getMonth()+1,1),to=`${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,"0")}-01`;const r=await apiFetch(`/api/dashboard/advisor?from=${from}&to=${to}`);if(!r.ok)return;const t=r.body?.data?.totals||{},meta=metaDe(currentProfile),total=Number(t.total||0),pct=metaPct(total,meta);setText("asesor-total-count",total);setText("asesor-contestadas-count",Number(t.contestadas||0));setText("asesor-nocontestadas-count",Number(t.no_contestadas||0));setText("asesor-pagos-count",Number(t.pagos||0));setText("asesor-compromisos-count",Number(t.compromisos||0));setText("asesor-meta-count",meta);setText("asesor-meta-pct",`${pct}%`);const bar=id("asesor-meta-bar");if(bar)bar.style.width=`${Math.min(100,pct)}%`;
   }
 
-  function renderUsers(){const tbody=id("tabla-usuarios");if(!tbody)return;tbody.innerHTML=advisors.map(a=>{const name=[a.nombre,a.apellido].filter(Boolean).join(" ")||"—";const meta=metaDe(a),hechas=calls.filter(c=>c.asesor_id===a.id).length,pct=metaPct(hechas,meta);return `<tr><td><strong>${escapeHTML(name)}</strong></td><td>${escapeHTML(a.email||"—")}</td><td>${meta}</td><td>${hechas}</td><td><div class="mini-progress"><span style="width:${Math.min(100,pct)}%"></span></div><small>${pct}%</small></td><td>${a.activo===false?'<span class="badge badge-disabled">Inhabilitado</span>':'<span class="badge badge-active">Activo</span>'}</td><td class="action-cell"><button class="btn-small" onclick="editAdvisor('${a.id}')">Editar</button><button class="btn-small" onclick="resetAdvisorPassword('${a.id}')">🔑 Contraseña</button><button class="btn-small" onclick="toggleAdvisor('${a.id}',${a.activo!==false})">${a.activo===false?"Habilitar":"Inhabilitar"}</button><button class="btn-delete" onclick="deleteAdvisor('${a.id}')">Eliminar</button></td></tr>`;}).join("")||'<tr class="empty-row"><td colspan="7">No hay asesores registrados.</td></tr>';}
+  function renderUsers(){
+    const tbody=id("tabla-usuarios");if(!tbody)return;
+    const q=value("filtroAsesorBuscar").toLowerCase();
+    const matches=q?advisors.filter(a=>[a.nombre,a.apellido,a.email,a.documento,a.telefono].join(" ").toLowerCase().includes(q)):[];
+    setText("asesores-registrados-count",`${advisors.length} asesor${advisors.length===1?"":"es"} registrado${advisors.length===1?"":"s"}`);
+    if(!q){tbody.innerHTML=`<tr class="empty-row"><td colspan="7">Hay ${advisors.length} asesor${advisors.length===1?"":"es"} registrado${advisors.length===1?"":"s"}. Usa el buscador para consultar un asesor en particular.</td></tr>`;return;}
+    tbody.innerHTML=matches.map(a=>{const name=[a.nombre,a.apellido].filter(Boolean).join(" ")||"—";const meta=metaDe(a),hechas=Number(advisorDashboardStats[a.id]?.total||0),pct=metaPct(hechas,meta);return `<tr><td><strong>${escapeHTML(name)}</strong></td><td>${escapeHTML(a.email||"—")}</td><td>${meta}</td><td>${hechas}</td><td><div class="mini-progress"><span style="width:${Math.min(100,pct)}%"></span></div><small>${pct}%</small></td><td>${a.activo===false?'<span class="badge badge-disabled">Inhabilitado</span>':'<span class="badge badge-active">Activo</span>'}</td><td class="action-cell"><button class="btn-small" onclick="editAdvisor('${a.id}')">Editar</button><button class="btn-small" onclick="resetAdvisorPassword('${a.id}')">🔑 Contraseña</button><button class="btn-small" onclick="toggleAdvisor('${a.id}',${a.activo!==false})">${a.activo===false?"Habilitar":"Inhabilitar"}</button><button class="btn-delete" onclick="deleteAdvisor('${a.id}')">Eliminar</button></td></tr>`;}).join("")||'<tr class="empty-row"><td colspan="7">No se encontró ningún asesor con ese criterio.</td></tr>';
+  }
 
   function resetAdminSurveyForm(){
     const form=id("admin-survey-form"); if(form)form.reset();
@@ -399,30 +442,24 @@
     e.preventDefault();
     if(!currentUser||!currentProfile){showToast("Tu sesión no está disponible.",true);return;}
     const enc={
-      llamada_id:null,
-      asesor_id:currentUser.id,
-      codigo_usuario:value("adminEncCodigoUsuario")||null,
-      calificacion_servicio:value("adminEncServicio")||null,
-      observacion_servicio:value("adminEncServicioObs")||null,
-      calificacion_tecnica:value("adminEncTecnica")||null,
-      observacion_tecnica:value("adminEncTecnicaObs")||null,
-      calificacion_administrativa:value("adminEncAdministrativa")||null,
-      observacion_administrativa:value("adminEncAdministrativaObs")||null,
-      agilidad_averias:value("adminEncAverias")||null,
-      recomendaria:value("adminEncRecomendaria")||null,
+      llamada_id:null, asesor_id:currentUser.id, codigo_usuario:value("adminEncCodigoUsuario")||null,
+      calificacion_servicio:value("adminEncServicio")||null, observacion_servicio:value("adminEncServicioObs")||null,
+      calificacion_tecnica:value("adminEncTecnica")||null, observacion_tecnica:value("adminEncTecnicaObs")||null,
+      calificacion_administrativa:value("adminEncAdministrativa")||null, observacion_administrativa:value("adminEncAdministrativaObs")||null,
+      agilidad_averias:value("adminEncAverias")||null, recomendaria:value("adminEncRecomendaria")||null,
       recomendacion_felicitacion:value("adminEncRecomendacion")||null
     };
     if(!enc.codigo_usuario){showToast("Escribe el nombre del cliente o usuario encuestado.",true);return;}
     setButtonBusy(e.submitter,true,"Guardando...");
-    const {data,error}=await sbClient.from("encuestascr").insert(enc).select(`*, perfilescr:asesor_id (id,nombre,apellido,email,rol,activo)`).single();
+    const {error}=await sbClient.from("encuestascr").insert(enc).select().single();
     setButtonBusy(e.submitter,false,"Guardar encuesta");
     if(error){console.error(error);showToast(error.message||"No fue posible guardar la encuesta.",true);return;}
-    surveys.unshift(data); populateSurveyFilters(); renderSurveys(); resetAdminSurveyForm(); showToast("Encuesta del administrador guardada correctamente.");
+    resetAdminSurveyForm(); await loadGeneralSurveys(); renderSurveys(); showToast("Encuesta del administrador guardada correctamente.");
   }
 
 
-  async function saveSeguimientoSurvey(e){e.preventDefault();const row={usuario:value("segUsuario"),como_se_entero:value("segEntero")||null,fechas_pago:value("segFechas"),medio_contrato:value("segContrato"),atencion_asesor:value("segAtencion"),redes_sociales:value("segRedes"),cobro_tecnico:value("segTecnica"),medios_pago:value("segMedios"),asesor_id:currentUser.id};const {data,error}=await sbClient.from("encuestas_seguimientocr").insert(row).select().single();if(error){showToast(error.message,true);return;}seguimientoSurveys.unshift(data);renderSeguimientoSurveys();e.target.reset();showToast("Encuesta de seguimiento guardada.");}
-  async function saveServicioSurvey(e){e.preventDefault();const row={usuario:value("srvUsuario"),servicio_retirado:value("srvServicio"),motivo_retiro:value("srvMotivo")||null,interes_retomar:value("srvRetomar"),observaciones:value("srvObservaciones")||null,asesor_id:currentUser.id};const {data,error}=await sbClient.from("encuestas_serviciocr").insert(row).select().single();if(error){showToast(error.message,true);return;}servicioSurveys.unshift(data);renderServicioSurveys();e.target.reset();showToast("Encuesta de servicio guardada.");}
+  async function saveSeguimientoSurvey(e){e.preventDefault();const row={usuario:value("segUsuario"),como_se_entero:value("segEntero")||null,fechas_pago:value("segFechas"),medio_contrato:value("segContrato"),atencion_asesor:value("segAtencion"),redes_sociales:value("segRedes"),cobro_tecnico:value("segTecnica"),medios_pago:value("segMedios"),asesor_id:currentUser.id};const {error}=await sbClient.from("encuestas_seguimientocr").insert(row).select().single();if(error){showToast(error.message,true);return;}e.target.reset();await loadSeguimientoSurveys();renderSeguimientoSurveys();showToast("Encuesta de seguimiento guardada.");}
+  async function saveServicioSurvey(e){e.preventDefault();const row={usuario:value("srvUsuario"),servicio_retirado:value("srvServicio"),motivo_retiro:value("srvMotivo")||null,interes_retomar:value("srvRetomar"),observaciones:value("srvObservaciones")||null,asesor_id:currentUser.id};const {error}=await sbClient.from("encuestas_serviciocr").insert(row).select().single();if(error){showToast(error.message,true);return;}e.target.reset();await loadServicioSurveys();renderServicioSurveys();showToast("Encuesta de servicio guardada.");}
   function renderSeguimientoSurveys(){const t=id("tabla-seguimiento-encuesta");if(!t)return;t.innerHTML=seguimientoSurveys.map(x=>`<tr><td>${escapeHTML(x.usuario)}</td><td>${escapeHTML(x.como_se_entero||"—")}</td><td>${escapeHTML(x.fechas_pago)}</td><td>${escapeHTML(x.medio_contrato)}</td><td>${escapeHTML(x.atencion_asesor)}</td><td>${escapeHTML(x.redes_sociales)}</td><td>${escapeHTML(x.cobro_tecnico)}</td><td>${escapeHTML(x.medios_pago)}</td><td>${formatDate(x.created_at?.slice(0,10))}</td></tr>`).join("")||'<tr class="empty-row"><td colspan="10">No hay encuestas registradas.</td></tr>';}
   function renderServicioSurveys(){const t=id("tabla-servicio-encuesta");if(!t)return;t.innerHTML=servicioSurveys.map(x=>`<tr><td>${formatDate(surveyDate(x))}</td><td>${escapeHTML(surveyAdvisorName(x))}</td><td>${escapeHTML(x.usuario)}</td><td>${escapeHTML(x.servicio_retirado)}</td><td>${escapeHTML(x.motivo_retiro||"—")}</td><td>${escapeHTML(x.interes_retomar)}</td><td>${escapeHTML(x.observaciones||"—")}</td></tr>`).join("")||'<tr class="empty-row"><td colspan="7">No hay encuestas registradas.</td></tr>';}
   function downloadSimpleCSV(name,rows){if(!rows.length){showToast("No hay datos para exportar.",true);return;}const keys=Object.keys(rows[0]).filter(k=>!["id","asesor_id"].includes(k));const csv=[keys.join(","),...rows.map(r=>keys.map(k=>`"${String(r[k]??"").replaceAll('"','""')}"`).join(","))].join("\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}));a.download=`reporte_${name}.csv`;a.click();}
@@ -558,7 +595,7 @@
     const desde=value("filtroDesdeAdmin"),hasta=value("filtroHastaAdmin"),period=desde||hasta?`${desde?formatDate(desde):"Inicio"} – ${hasta?formatDate(hasta):"Actual"}`:"Todos los periodos";
     const comparativo=advisorCallSummary(filtered).slice(0,8).map(g=>({label:g.name,value:g.total,color:"#8064b3"}));
     const gestionItems=TIPOS_GESTION.map(t=>({label:TIPOS_GESTION_CORTO[t]||t,value:filtered.filter(c=>c.tipo_gestion===t).length,color:"#0ea5e9"}));
-    return `<div class="print-report-sheet compact-pdf">${config.logo_url?`<div class="print-logo"><img src="${config.logo_url}" alt="Logo"></div>`:""}<div class="print-header"><div><span class="print-kicker">REPORTE DE CARTERA</span><h1>Llamadas de cobro</h1><p>Periodo: <strong>${escapeHTML(period)}</strong> · Asesores: <strong>${escapeHTML(asesoresComparadosTexto())}</strong></p></div><div class="print-generated">Generado: ${new Date().toLocaleString("es-CO")}</div></div><div class="print-summary"><div class="print-summary-card"><span>Total llamadas</span><strong>${total}</strong></div><div class="print-summary-card"><span>Contestadas</span><strong>${contestadas}</strong></div><div class="print-summary-card"><span>No contestadas</span><strong>${no}</strong></div><div class="print-summary-card"><span>Equivocadas</span><strong>${equivocadas}</strong></div><div class="print-summary-card"><span>Compromisos</span><strong>${compromisos}</strong></div><div class="print-summary-card"><span>Pagos</span><strong>${pagos}</strong></div></div><section class="print-charts">${donutCardHTML("Tipo de llamada",[{label:"Contestada",value:contestadas,color:"#2ecc71"},{label:"No contestada",value:no,color:"#e74c3c"},{label:"Equivocada",value:equivocadas,color:"#f1c40f"},{label:"Sin especificar",value:sinEspecificar,color:"#9b8fb5"}],total,"total")}${donutCardHTML("Compromisos y pagos",[{label:"Pagos",value:pagos,color:"#2ecc71"},{label:"Compromisos",value:compromisos,color:"#8064b3"}],`${total?Math.round(pagos/total*100):0}%`,"pagaron")}<div class="print-chart-card"><h2>Comparativo por asesor</h2>${svgBarCompare(comparativo)}</div><div class="print-chart-card" style="grid-column:1 / -1"><h2>Tipo de llamada (gestión)</h2>${svgBarCompare(gestionItems,900)}</div></section><section class="print-table-section"><div class="print-table-title"><div><span class="print-kicker">CLASIFICACIÓN</span><h2>Resultado de llamadas, compromisos y pagos</h2></div><strong>${total} llamadas</strong></div><div class="print-table-scroll"><table><thead><tr><th>Clasificación</th><th>Cantidad</th><th>% del total</th></tr></thead><tbody><tr><td>Contestadas</td><td>${contestadas}</td><td>${total?Math.round(contestadas/total*100):0}%</td></tr><tr><td>No contestadas</td><td>${no}</td><td>${total?Math.round(no/total*100):0}%</td></tr><tr><td>Equivocadas</td><td>${equivocadas}</td><td>${total?Math.round(equivocadas/total*100):0}%</td></tr><tr><td>Sin especificar</td><td>${sinEspecificar}</td><td>${total?Math.round(sinEspecificar/total*100):0}%</td></tr><tr><td>Con compromiso de pago</td><td>${compromisos}</td><td>${total?Math.round(compromisos/total*100):0}%</td></tr><tr><td>Con pago registrado</td><td>${pagos}</td><td>${total?Math.round(pagos/total*100):0}%</td></tr></tbody></table></div></section>${finalGoalBannerHTML(metaTotal,monthlyCalls.length,monthlyPct)}</div>`;
+    return `<div class="print-report-sheet compact-pdf">${config.logo_url?`<div class="print-logo"><img src="${config.logo_url}" alt="Logo"></div>`:""}<div class="print-header"><div><span class="print-kicker">REPORTE DE CARTERA</span><h1>Llamadas de cobro</h1><p>Periodo: <strong>${escapeHTML(period)}</strong> · Asesores: <strong>${escapeHTML(asesoresComparadosTexto())}</strong></p></div><div class="print-generated">Generado: ${new Date().toLocaleString("es-CO")}</div></div><div class="print-summary"><div class="print-summary-card"><span>Total llamadas</span><strong>${total}</strong></div><div class="print-summary-card"><span>Contestadas</span><strong>${contestadas}</strong></div><div class="print-summary-card"><span>No contestadas</span><strong>${no}</strong></div><div class="print-summary-card"><span>Equivocadas</span><strong>${equivocadas}</strong></div><div class="print-summary-card"><span>Compromisos</span><strong>${compromisos}</strong></div><div class="print-summary-card"><span>Pagos</span><strong>${pagos}</strong></div></div><section class="print-charts">${donutCardHTML("Tipo de llamada",[{label:"Contestada",value:contestadas,color:"#2ecc71"},{label:"No contestada",value:no,color:"#e74c3c"},{label:"Equivocada",value:equivocadas,color:"#f1c40f"},{label:"Sin especificar",value:sinEspecificar,color:"#9b8fb5"}],total,"total")}${donutCardHTML("Compromisos y pagos",[{label:"Pagos",value:pagos,color:"#2ecc71"},{label:"Compromisos",value:compromisos,color:"#8064b3"}],`${total?Math.round(pagos/total*100):0}%`,"pagaron")}<div class="print-chart-card"><h2>Comparativo por asesor</h2>${svgBarCompare(comparativo)}</div><div class="print-chart-card" style="grid-column:1 / -1"><h2>Tipo de llamada (gestión)</h2>${svgBarCompare(gestionItems,900)}</div></section><section class="print-table-section"><div class="print-table-title"><div><span class="print-kicker">CLASIFICACIÓN</span><h2>Resultado de llamadas, compromisos y pagos</h2></div><strong>${total} llamadas</strong></div><div class="print-table-scroll"><table><thead><tr><th>Clasificación</th><th>Cantidad</th><th>% del total</th></tr></thead><tbody><tr><td>Contestadas</td><td>${contestadas}</td><td>${total?Math.round(contestadas/total*100):0}%</td></tr><tr><td>No contestadas</td><td>${no}</td><td>${total?Math.round(no/total*100):0}%</td></tr><tr><td>Equivocadas</td><td>${equivocadas}</td><td>${total?Math.round(equivocadas/total*100):0}%</td></tr><tr><td>Sin especificar</td><td>${sinEspecificar}</td><td>${total?Math.round(sinEspecificar/total*100):0}%</td></tr><tr><td>Con compromiso de pago</td><td>${compromisos}</td><td>${total?Math.round(compromisos/total*100):0}%</td></tr><tr><td>Con pago registrado</td><td>${pagos}</td><td>${total?Math.round(pagos/total*100):0}%</td></tr></tbody></table></div></section><section class="print-table-section report-detail-section"><div class="print-table-title"><div><span class="print-kicker">DETALLE</span><h2>Llamadas del periodo</h2></div><strong>${total} registros</strong></div><div class="print-table-scroll"><table class="compact-report-table"><thead><tr><th>ID</th><th>Asesor</th><th>Cliente</th><th>Llamada</th><th>Gestión</th><th>Zona</th><th>Fecha</th><th>Compromiso</th><th>Pago</th></tr></thead><tbody>${filtered.map(c=>{const a=c.perfilescr||{},asesor=[a.nombre,a.apellido].filter(Boolean).join(" ")||a.email||"Sin asesor";return `<tr><td>#${escapeHTML(callId(c))}</td><td>${escapeHTML(asesor)}</td><td>${escapeHTML(c.cliente||"—")}</td><td>${escapeHTML(c.llamada||"Sin especificar")}</td><td>${escapeHTML(TIPOS_GESTION_CORTO[c.tipo_gestion]||c.tipo_gestion||"Sin especificar")}</td><td>${escapeHTML(c.zona||"—")}</td><td>${formatDate(c.fecha_llamada)}</td><td>${c.compromiso_pago?formatDate(c.fecha_compromiso):"—"}</td><td>${c.pago?"Sí":"No"}</td></tr>`;}).join("")||'<tr><td colspan="9" class="print-empty-row">No hay llamadas para los filtros seleccionados.</td></tr>'}</tbody></table></div></section>${finalGoalBannerHTML(metaTotal,monthlyCalls.length,monthlyPct)}</div>`;
   }
   function previewReport(builder=buildReportHTML){const modal=id("report-preview-modal"),content=id("report-preview-content");if(!modal||!content){showToast("No se encontró el visor de reportes.",true);return;}try{content.innerHTML=builder();modal.classList.remove("hidden");modal.setAttribute("aria-hidden","false");document.body.classList.add("report-preview-open");}catch(e){console.error(e);showToast("No fue posible preparar la vista previa.",true);}}
   function closeReportPreview(){const modal=id("report-preview-modal");if(!modal)return;modal.classList.add("hidden");modal.setAttribute("aria-hidden","true");document.body.classList.remove("report-preview-open");}
@@ -613,12 +650,12 @@
   }
 
   function buildAdvisorReportHTML(){
-    const list=getFilteredAsesorCalls(),total=list.length,contestadas=list.filter(c=>c.llamada==="Contestada").length,no=list.filter(c=>c.llamada==="No contestada").length,equivocadas=list.filter(c=>c.llamada==="Equivocada").length,compromisos=list.filter(c=>c.compromiso_pago).length,pagos=list.filter(c=>c.pago).length,pct=n=>total?Math.round(n/total*100):0;
+    const list=getFilteredAsesorCalls(),total=list.length,contestadas=list.filter(c=>c.llamada==="Contestada").length,no=list.filter(c=>c.llamada==="No contestada").length,equivocadas=list.filter(c=>c.llamada==="Equivocada").length,sinEspecificar=list.filter(c=>!c.llamada||c.llamada==="Sin especificar").length,compromisos=list.filter(c=>c.compromiso_pago).length,pagos=list.filter(c=>c.pago).length,pct=n=>total?Math.round(n/total*100):0;
     const nombre=[currentProfile?.nombre,currentProfile?.apellido].filter(Boolean).join(" ")||currentProfile?.email||"Asesor";
     const meta=metaDe(currentProfile),avance=metaPct(calls.length,meta);
     const from=value("filtroAsesorDesde"),to=value("filtroAsesorHasta"),period=from||to?`${from?formatDate(from):"Inicio"} – ${to?formatDate(to):"Actual"}`:"Todos los periodos";
-    const rows=list.map(c=>`<tr><td>${escapeHTML(c.cliente)}</td><td>${escapeHTML(c.llamada)}</td><td>${escapeHTML(TIPOS_GESTION_CORTO[c.tipo_gestion]||c.tipo_gestion||"—")}</td><td>${escapeHTML(c.zona)}</td><td>${formatDate(c.fecha_llamada)}</td><td>${c.compromiso_pago?formatDate(c.fecha_compromiso):"—"}</td><td>${c.pago?"Sí":"No"}</td></tr>`).join("");
-    return `<div class="print-report-sheet">${config.logo_url?`<div class="print-logo"><img src="${config.logo_url}" alt="Logo"></div>`:""}<div class="print-header"><div><span class="print-kicker">REPORTE DE AVANCE</span><h1>${escapeHTML(nombre)}</h1><p>Zona: <strong>${escapeHTML(currentProfile?.zona||"—")}</strong> · Periodo: <strong>${escapeHTML(period)}</strong></p></div><div class="print-generated">Generado: ${new Date().toLocaleString("es-CO")}</div></div><div class="print-summary"><div class="print-summary-card"><span>Llamadas del periodo</span><strong>${total}</strong></div><div class="print-summary-card"><span>Contestadas</span><strong>${contestadas}</strong></div><div class="print-summary-card"><span>Compromisos</span><strong>${compromisos}</strong></div><div class="print-summary-card"><span>Pagos</span><strong>${pagos}</strong></div><div class="print-summary-card"><span>Meta asignada</span><strong>${meta}</strong></div><div class="print-summary-card"><span>Avance de la meta</span><strong>${avance}%</strong></div><div class="print-summary-card"><span>Pendientes</span><strong>${Math.max(0,meta-calls.length)}</strong></div></div><section class="print-charts">${donutCardHTML("Tipo de llamada",[{label:"Contestada",value:contestadas,color:"#2ecc71"},{label:"No contestada",value:no,color:"#e74c3c"},{label:"Equivocada",value:equivocadas,color:"#f1c40f"},{label:"Sin especificar",value:sinEspecificar,color:"#9b8fb5"}],total,"total")}<div class="print-chart-card" style="grid-column:span 2"><h2>Tipo de llamada (gestión)</h2>${svgBarCompare(TIPOS_GESTION.map(t=>({label:TIPOS_GESTION_CORTO[t]||t,value:list.filter(c=>c.tipo_gestion===t).length,color:"#0ea5e9"})),620)}</div></section><section class="print-table-section"><div class="print-table-title"><div><span class="print-kicker">DETALLE</span><h2>Mis llamadas</h2></div><strong>${total} resultado${total===1?"":"s"}</strong></div><div class="print-table-scroll"><table><thead><tr><th>Cliente</th><th>Llamada</th><th>Tipo de llamada</th><th>Zona</th><th>Fecha</th><th>Compromiso</th><th>Pago</th></tr></thead><tbody>${rows||'<tr><td colspan="7" class="print-empty-row">No hay registros.</td></tr>'}</tbody></table></div></section></div>`;
+    const rows=list.map(c=>{const a=c.perfilescr||{};const asesor=[a.nombre,a.apellido].filter(Boolean).join(" ")||a.email||nombre;return `<tr><td>#${escapeHTML(callId(c))}</td><td>${escapeHTML(asesor)}</td><td>${escapeHTML(c.cliente||"—")}</td><td>${escapeHTML(c.llamada||"Sin especificar")}</td><td>${escapeHTML(TIPOS_GESTION_CORTO[c.tipo_gestion]||c.tipo_gestion||"Sin especificar")}</td><td>${escapeHTML(c.zona||"—")}</td><td>${formatDate(c.fecha_llamada)}</td><td>${c.compromiso_pago?formatDate(c.fecha_compromiso):"—"}</td><td>${c.pago?"Sí":"No"}</td></tr>`;}).join("");
+    return `<div class="print-report-sheet">${config.logo_url?`<div class="print-logo"><img src="${config.logo_url}" alt="Logo"></div>`:""}<div class="print-header"><div><span class="print-kicker">REPORTE DE AVANCE</span><h1>${escapeHTML(nombre)}</h1><p>Zona: <strong>${escapeHTML(currentProfile?.zona||"—")}</strong> · Periodo: <strong>${escapeHTML(period)}</strong></p></div><div class="print-generated">Generado: ${new Date().toLocaleString("es-CO")}</div></div><div class="print-summary"><div class="print-summary-card"><span>Llamadas del periodo</span><strong>${total}</strong></div><div class="print-summary-card"><span>Contestadas</span><strong>${contestadas}</strong></div><div class="print-summary-card"><span>Compromisos</span><strong>${compromisos}</strong></div><div class="print-summary-card"><span>Pagos</span><strong>${pagos}</strong></div><div class="print-summary-card"><span>Meta asignada</span><strong>${meta}</strong></div><div class="print-summary-card"><span>Avance de la meta</span><strong>${avance}%</strong></div><div class="print-summary-card"><span>Pendientes</span><strong>${Math.max(0,meta-calls.length)}</strong></div></div><section class="print-charts">${donutCardHTML("Tipo de llamada",[{label:"Contestada",value:contestadas,color:"#2ecc71"},{label:"No contestada",value:no,color:"#e74c3c"},{label:"Equivocada",value:equivocadas,color:"#f1c40f"},{label:"Sin especificar",value:sinEspecificar,color:"#9b8fb5"}],total,"total")}<div class="print-chart-card" style="grid-column:span 2"><h2>Tipo de llamada (gestión)</h2>${svgBarCompare(TIPOS_GESTION.map(t=>({label:TIPOS_GESTION_CORTO[t]||t,value:list.filter(c=>c.tipo_gestion===t).length,color:"#0ea5e9"})),620)}</div></section><section class="print-table-section"><div class="print-table-title"><div><span class="print-kicker">DETALLE</span><h2>Mis llamadas</h2></div><strong>${total} resultado${total===1?"":"s"}</strong></div><div class="print-table-scroll"><table><thead><tr><th>ID</th><th>Asesor</th><th>Cliente</th><th>Llamada</th><th>Gestión</th><th>Zona</th><th>Fecha</th><th>Compromiso</th><th>Pago</th></tr></thead><tbody>${rows||'<tr><td colspan="9" class="print-empty-row">No hay registros.</td></tr>'}</tbody></table></div></section></div>`;
   }
   function previewAdvisorReport(){previewReport(buildAdvisorReportHTML);}
   function printAdvisorReport(){printReport(buildAdvisorReportHTML);}
@@ -794,30 +831,27 @@ ${sers}
     })();
   }
 
-  function populateSurveyFilters(){
-    const select=id("filtroEncuestaAsesor"); if(!select)return;
-    const current=select.value;
+  function surveyPeople(){
     const people=[...advisors];
-    if(isCurrentAdmin() && !people.some(p=>p.id===currentProfile.id)) people.push(currentProfile);
-    surveys.forEach(s=>{const p=s.perfilescr;if(p&&!people.some(x=>x.id===p.id))people.push(p);});
-    select.innerHTML='<option value="">Todos los responsables</option>'+people.map(a=>`<option value="${a.id}">${escapeHTML([a.nombre,a.apellido].filter(Boolean).join(" ")||a.email||"Usuario")}${a.rol==="administrador"?" · Administrador":""}</option>`).join("");
+    if(isCurrentAdmin() && currentProfile && !people.some(p=>p.id===currentProfile.id)) people.push(currentProfile);
+    return people;
+  }
+  function fillSurveyAdvisorSelect(selector){
+    const select=id(selector);if(!select)return;const current=select.value;
+    const people=surveyPeople();
+    select.innerHTML='<option value="">Todos los asesores</option>'+people.map(a=>`<option value="${a.id}">${escapeHTML([a.nombre,a.apellido].filter(Boolean).join(" ")||a.email||"Usuario")}${isAdminRole(a.rol)?" · Administrador":""}</option>`).join("");
     select.value=current;
   }
-  function getFilteredSurveys(){
-    const asesor=value("filtroEncuestaAsesor"),from=value("filtroEncuestaDesde"),to=value("filtroEncuestaHasta"),text=value("filtroEncuestaTexto").toLowerCase();
-    return surveys.filter(s=>{
-      const a=s.perfilescr||{};
-      const search=[a.nombre,a.apellido,a.email,s.codigo_usuario,s.calificacion_servicio,s.calificacion_tecnica,s.calificacion_administrativa,s.agilidad_averias,s.recomendaria,s.recomendacion_felicitacion,s.observacion_servicio,s.observacion_tecnica,s.observacion_administrativa].join(" ").toLowerCase();
-      const fecha=surveyDate(s);
-      return (!asesor||s.asesor_id===asesor)&&(!from||fecha>=from)&&(!to||fecha<=to)&&(!text||search.includes(text));
-    });
-  }
+  function populateSurveyFilters(){["filtroEncuestaAsesor","seg-filter-asesor","srv-filter-asesor"].forEach(fillSurveyAdvisorSelect);}
+
+  function getFilteredSurveys(){return surveys;}
   function surveyAdvisorName(s){
     const a=s?.perfilescr||{};
     if(a.nombre||a.apellido) return [a.nombre,a.apellido].filter(Boolean).join(" ");
-    if(s?.asesor_id===currentProfile?.id) return [currentProfile?.nombre,currentProfile?.apellido].filter(Boolean).join(" ")||currentProfile?.email||"—";
+    if(s?.asesor_id===currentProfile?.id) return [currentProfile?.nombre,currentProfile?.apellido].filter(Boolean).join(" ")||currentProfile?.email||"Administrador";
     const adv=advisors.find(x=>x.id===s?.asesor_id);
-    return adv?[adv.nombre,adv.apellido].filter(Boolean).join(" ")||adv.email||"—": "—";
+    if(adv)return [adv.nombre,adv.apellido].filter(Boolean).join(" ")||adv.email||"Asesor";
+    return isCurrentAdmin()?"Administrador":"—";
   }
   function renderSurveys(){
     const tbody=id("tabla-encuestas"); if(!tbody)return;
@@ -829,7 +863,7 @@ ${sers}
   }
   function clearSurveyFilters(){
     ["filtroEncuestaAsesor","filtroEncuestaDesde","filtroEncuestaHasta","filtroEncuestaTexto"].forEach(x=>{if(id(x))id(x).value="";});
-    renderSurveys();
+    loadGeneralSurveys();
   }
   function surveyPeriod(){
     const from=value("filtroEncuestaDesde"),to=value("filtroEncuestaHasta");
@@ -845,7 +879,7 @@ ${sers}
   function buildSurveyReportHTML(){
     const filtered=getFilteredSurveys();
     const rows=filtered.map(s=>`<tr><td>${formatDate(surveyDate(s))}</td><td>${escapeHTML(surveyAdvisorName(s))}</td><td>${escapeHTML(s.codigo_usuario||"—")}</td><td>${escapeHTML(s.calificacion_servicio||"—")}</td><td>${escapeHTML(s.calificacion_tecnica||"—")}</td><td>${escapeHTML(s.calificacion_administrativa||"—")}</td><td>${escapeHTML(s.agilidad_averias||"—")}</td><td>${escapeHTML(s.recomendaria||"—")}</td><td>${escapeHTML(s.recomendacion_felicitacion||"—")}</td><td>${escapeHTML(s.observacion_servicio||"—")}</td><td>${escapeHTML(s.observacion_tecnica||"—")}</td><td>${escapeHTML(s.observacion_administrativa||"—")}</td></tr>`).join("");
-    return `<div class="print-report-sheet survey-print-sheet">${config.logo_url?`<div class="print-logo"><img src="${config.logo_url}" alt="Logo"></div>`:""}<div class="print-header"><div><span class="print-kicker">REPORTE DE SATISFACCIÓN</span><h1>Encuestas independientes</h1><p>Asesor: <strong>${escapeHTML(surveyAdvisorFilterName())}</strong> · Periodo: <strong>${escapeHTML(surveyPeriod())}</strong></p></div><div class="print-generated">Generado: ${new Date().toLocaleString("es-CO")}</div></div><div class="print-summary"><div class="print-summary-card"><span>Total encuestas</span><strong>${filtered.length}</strong></div><div class="print-summary-card"><span>Recomendarían</span><strong>${filtered.filter(s=>s.recomendaria==="SI").length}</strong></div><div class="print-summary-card"><span>No recomendarían</span><strong>${filtered.filter(s=>s.recomendaria==="NO").length}</strong></div></div><section class="print-table-section"><div class="print-table-title"><div><span class="print-kicker">RESPUESTAS</span><h2>Detalle de encuestas</h2></div><strong>${filtered.length} encuesta${filtered.length===1?"":"s"}</strong></div><div class="print-table-scroll"><table class="survey-report-table"><thead><tr><th>Fecha</th><th>Asesor</th><th>Usuario encuestado</th><th>Servicio</th><th>Técnica</th><th>Administrativa</th><th>Averías</th><th>Recomendaría</th><th>Recomendación / felicitación</th><th>Obs. servicio</th><th>Obs. técnica</th><th>Obs. administrativa</th></tr></thead><tbody>${rows||'<tr><td colspan="12" class="print-empty-row">No hay encuestas para los filtros seleccionados.</td></tr>'}</tbody></table></div></section></div>`;
+    return `<div class="print-report-sheet survey-print-sheet compact-pdf">${config.logo_url?`<div class="print-logo"><img src="${config.logo_url}" alt="Logo"></div>`:""}<div class="print-header"><div><span class="print-kicker">REPORTE DE SATISFACCIÓN</span><h1>Encuestas independientes</h1><p>Asesor: <strong>${escapeHTML(surveyAdvisorFilterName())}</strong> · Periodo: <strong>${escapeHTML(surveyPeriod())}</strong></p></div><div class="print-generated">Generado: ${new Date().toLocaleString("es-CO")}</div></div><div class="print-summary"><div class="print-summary-card"><span>Total encuestas</span><strong>${filtered.length}</strong></div><div class="print-summary-card"><span>Recomendarían</span><strong>${filtered.filter(s=>s.recomendaria==="SI").length}</strong></div><div class="print-summary-card"><span>No recomendarían</span><strong>${filtered.filter(s=>s.recomendaria==="NO").length}</strong></div></div><section class="print-table-section"><div class="print-table-title"><div><span class="print-kicker">RESPUESTAS</span><h2>Detalle de encuestas</h2></div><strong>${filtered.length} encuesta${filtered.length===1?"":"s"}</strong></div><div class="print-table-scroll"><table class="survey-report-table"><thead><tr><th>Fecha</th><th>Asesor</th><th>Usuario encuestado</th><th>Servicio</th><th>Técnica</th><th>Administrativa</th><th>Averías</th><th>Recomendaría</th><th>Recomendación / felicitación</th><th>Obs. servicio</th><th>Obs. técnica</th><th>Obs. administrativa</th></tr></thead><tbody>${rows||'<tr><td colspan="12" class="print-empty-row">No hay encuestas para los filtros seleccionados.</td></tr>'}</tbody></table></div></section></div>`;
   }
   function downloadSurveyExcel(){
     try{
@@ -881,7 +915,7 @@ ${sers}
     try {
       const {error}=await sbClient.auth.signOut();
       if(error){showToast("No fue posible cerrar la sesión.",true);return;}
-      currentUser=null; currentProfile=null; calls=[]; advisors=[]; surveys=[]; seguimientoSurveys=[]; servicioSurveys=[];
+      currentUser=null; currentProfile=null; calls=[]; advisors=[]; surveys=[]; seguimientoSurveys=[]; servicioSurveys=[]; advisorDashboardStats={};
       asesoresSeleccionados=[];
       closeSidebar(); showAuthView();
       const form=id("login-form"); if(form)form.reset();
@@ -932,33 +966,33 @@ ${sers}
   let toastTimer;function showToast(msg,error=false){const t=id("toast");t.textContent=msg;t.classList.toggle("error",error);t.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove("show"),3500);}
 
 
-  function surveyDate(x){return (x.created_at||"").slice(0,10);}
-  function getFilteredSeguimiento(){const f=value("seg-filter-from"),t=value("seg-filter-to"),u=value("seg-filter-user").toLowerCase(),a=value("seg-filter-att"),p=value("seg-filter-pay");return seguimientoSurveys.filter(x=>{const d=surveyDate(x);return(!f||d>=f)&&(!t||d<=t)&&(!u||String(x.usuario||"").toLowerCase().includes(u))&&(!a||x.atencion_asesor===a)&&(!p||x.fechas_pago===p);});}
-  function getFilteredServicio(){const f=value("srv-filter-from"),t=value("srv-filter-to"),u=value("srv-filter-user").toLowerCase(),s=value("srv-filter-service"),r=value("srv-filter-retomar");return servicioSurveys.filter(x=>{const d=surveyDate(x);return(!f||d>=f)&&(!t||d<=t)&&(!u||String(x.usuario||"").toLowerCase().includes(u))&&(!s||x.servicio_retirado===s)&&(!r||x.interes_retomar===r);});}
-  const _renderSeg=renderSeguimientoSurveys, _renderSrv=renderServicioSurveys;
-  renderSeguimientoSurveys=function(){const rows=getFilteredSeguimiento();const t=id("tabla-seguimiento-encuesta");if(!t)return;t.innerHTML=rows.map(x=>`<tr><td>${formatDate(surveyDate(x))}</td><td>${escapeHTML(surveyAdvisorName(x))}</td><td>${escapeHTML(x.usuario)}</td><td>${escapeHTML(x.como_se_entero||"—")}</td><td>${escapeHTML(x.fechas_pago)}</td><td>${escapeHTML(x.medio_contrato)}</td><td>${escapeHTML(x.atencion_asesor)}</td><td>${escapeHTML(x.redes_sociales)}</td><td>${escapeHTML(x.cobro_tecnico)}</td><td>${escapeHTML(x.medios_pago)}</td></tr>`).join("")||'<tr class="empty-row"><td colspan="10">No hay encuestas con los filtros seleccionados.</td></tr>';}
-  renderServicioSurveys=function(){const rows=getFilteredServicio();const t=id("tabla-servicio-encuesta");if(!t)return;t.innerHTML=rows.map(x=>`<tr><td>${formatDate(surveyDate(x))}</td><td>${escapeHTML(surveyAdvisorName(x))}</td><td>${escapeHTML(x.usuario)}</td><td>${escapeHTML(x.servicio_retirado)}</td><td>${escapeHTML(x.motivo_retiro||"—")}</td><td>${escapeHTML(x.interes_retomar)}</td><td>${escapeHTML(x.observaciones||"—")}</td></tr>`).join("")||'<tr class="empty-row"><td colspan="7">No hay encuestas con los filtros seleccionados.</td></tr>';}
-  function clearSegFilters(){["seg-filter-from","seg-filter-to","seg-filter-user","seg-filter-att","seg-filter-pay"].forEach(k=>{if(id(k))id(k).value="";});renderSeguimientoSurveys();}
-  function clearSrvFilters(){["srv-filter-from","srv-filter-to","srv-filter-user","srv-filter-service","srv-filter-retomar"].forEach(k=>{if(id(k))id(k).value="";});renderServicioSurveys();}
-
   function buildSeguimientoReportHTML(){
     const rows=getFilteredSeguimiento();
-    const trs=rows.map(x=>`<tr><td>${formatDate(surveyDate(x))}</td><td>${escapeHTML(surveyAdvisorName(x))}</td><td>${escapeHTML(x.usuario)}</td><td>${escapeHTML(x.como_se_entero||"—")}</td><td>${escapeHTML(x.fechas_pago)}</td><td>${escapeHTML(x.medio_contrato)}</td><td>${escapeHTML(x.atencion_asesor)}</td><td>${escapeHTML(x.redes_sociales)}</td><td>${escapeHTML(x.cobro_tecnico)}</td><td>${escapeHTML(x.medios_pago)}</td><td>${formatDate(surveyDate(x))}</td></tr>`).join("");
-    return `<div class="print-report-sheet">${config.logo_url?`<div class="print-logo"><img src="${config.logo_url}" alt="Logo"></div>`:""}<div class="print-header"><div><span class="print-kicker">ENCUESTA DE SEGUIMIENTO</span><h1>Reporte de seguimiento</h1><p>${rows.length} registro${rows.length===1?"":"s"}</p></div><div class="print-generated">Generado: ${new Date().toLocaleString("es-CO")}</div></div><div class="print-summary"><div class="print-summary-card"><span>Total encuestas</span><strong>${rows.length}</strong></div><div class="print-summary-card"><span>Fechas de pago informadas</span><strong>${rows.filter(x=>x.fechas_pago==="SI").length}</strong></div><div class="print-summary-card"><span>Cobro técnico adicional</span><strong>${rows.filter(x=>x.cobro_tecnico==="SI").length}</strong></div></div><section class="print-table-section"><div class="print-table-title"><div><span class="print-kicker">DETALLE</span><h2>Encuestas de seguimiento</h2></div></div><div class="print-table-scroll"><table><thead><tr><th>Fecha</th><th>Asesor</th><th>Usuario</th><th>¿Cómo se enteró?</th><th>Fechas de pago</th><th>Contrato</th><th>Atención</th><th>Redes</th><th>Cobro técnico</th><th>Medios de pago</th><th>Fecha</th></tr></thead><tbody>${trs||'<tr><td colspan="11" class="print-empty-row">No hay registros.</td></tr>'}</tbody></table></div></section></div>`;
+    const trs=rows.map(x=>`<tr><td>${formatDate(surveyDate(x))}</td><td>${escapeHTML(surveyAdvisorName(x))}</td><td>${escapeHTML(x.usuario)}</td><td>${escapeHTML(x.como_se_entero||"—")}</td><td>${escapeHTML(x.fechas_pago||"—")}</td><td>${escapeHTML(x.medio_contrato||"—")}</td><td>${escapeHTML(x.atencion_asesor||"—")}</td><td>${escapeHTML(x.redes_sociales||"—")}</td><td>${escapeHTML(x.cobro_tecnico||"—")}</td><td>${escapeHTML(x.medios_pago)}</td></tr>`).join("");
+    return `<div class="print-report-sheet compact-pdf">${config.logo_url?`<div class="print-logo"><img src="${config.logo_url}" alt="Logo"></div>`:""}<div class="print-header"><div><span class="print-kicker">ENCUESTA DE SEGUIMIENTO</span><h1>Reporte de seguimiento</h1><p>${rows.length} registro${rows.length===1?"":"s"}</p></div><div class="print-generated">Generado: ${new Date().toLocaleString("es-CO")}</div></div><div class="print-summary"><div class="print-summary-card"><span>Total encuestas</span><strong>${rows.length}</strong></div><div class="print-summary-card"><span>Fechas de pago informadas</span><strong>${rows.filter(x=>x.fechas_pago==="SI").length}</strong></div><div class="print-summary-card"><span>Cobro técnico adicional</span><strong>${rows.filter(x=>x.cobro_tecnico==="SI").length}</strong></div></div><section class="print-table-section"><div class="print-table-title"><div><span class="print-kicker">DETALLE</span><h2>Encuestas de seguimiento</h2></div></div><div class="print-table-scroll"><table><thead><tr><th>Fecha</th><th>Asesor</th><th>Usuario</th><th>¿Cómo se enteró?</th><th>Fechas de pago</th><th>Contrato</th><th>Atención</th><th>Redes</th><th>Cobro técnico</th><th>Medios de pago</th></tr></thead><tbody>${trs||'<tr><td colspan="10" class="print-empty-row">No hay registros.</td></tr>'}</tbody></table></div></section></div>`;
   }
   function buildServicioReportHTML(){
     const rows=getFilteredServicio();
     const cards=rows.map((x,i)=>`<article class="survey-detail-card" style="border:1px solid #ddd7e7;border-radius:12px;padding:14px;margin:0 0 14px;background:#fff;break-inside:avoid;page-break-inside:avoid"><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px"><div><span class="print-kicker">ENCUESTA ${i+1}</span><h2 style="margin:3px 0 0">Detalle de encuesta de servicio</h2><p style="margin:4px 0 0;font-size:10px">Asesor que realiza la encuesta: <strong>${escapeHTML(surveyAdvisorName(x))}</strong></p></div><div style="text-align:right;font-size:10px"><span style="display:block;color:#666">Fecha</span><strong>${formatDate(surveyDate(x))}</strong></div></div><table style="width:100%;border-collapse:collapse;font-size:10px"><tbody><tr><th style="width:28%;padding:7px;border:1px solid #ddd7e7;text-align:left">Usuario</th><td style="padding:7px;border:1px solid #ddd7e7">${escapeHTML(x.usuario||"—")}</td></tr><tr><th style="padding:7px;border:1px solid #ddd7e7;text-align:left">Servicio retirado</th><td style="padding:7px;border:1px solid #ddd7e7">${escapeHTML(x.servicio_retirado||"—")}</td></tr><tr><th style="padding:7px;border:1px solid #ddd7e7;text-align:left">Motivo del retiro</th><td style="padding:7px;border:1px solid #ddd7e7;white-space:pre-wrap">${escapeHTML(x.motivo_retiro||"—")}</td></tr><tr><th style="padding:7px;border:1px solid #ddd7e7;text-align:left">¿Le interesaría retomar?</th><td style="padding:7px;border:1px solid #ddd7e7">${escapeHTML(x.interes_retomar||"—")}</td></tr><tr><th style="padding:7px;border:1px solid #ddd7e7;text-align:left">Observaciones</th><td style="padding:7px;border:1px solid #ddd7e7;white-space:pre-wrap">${escapeHTML(x.observaciones||"—")}</td></tr></tbody></table></article>`).join("");
-    return `<div class="print-report-sheet">${config.logo_url?`<div class="print-logo"><img src="${config.logo_url}" alt="Logo"></div>`:""}<div class="print-header"><div><span class="print-kicker">ENCUESTA DE SERVICIO</span><h1>Reporte de retiros de servicio</h1><p>Detalle completo de las encuestas registradas</p></div><div class="print-generated">Generado: ${new Date().toLocaleString("es-CO")}</div></div><div class="print-summary"><div class="print-summary-card"><span>Total encuestas</span><strong>${rows.length}</strong></div><div class="print-summary-card"><span>Interesados en retomar</span><strong>${rows.filter(x=>x.interes_retomar==="SI").length}</strong></div><div class="print-summary-card"><span>No interesados</span><strong>${rows.filter(x=>x.interes_retomar==="NO").length}</strong></div></div><section class="print-table-section"><div class="print-table-title"><div><span class="print-kicker">RESPUESTAS</span><h2>Detalle individual</h2></div><strong>${rows.length} encuesta${rows.length===1?"":"s"}</strong></div>${cards||'<div class="print-empty-row" style="padding:20px">No hay registros para los filtros seleccionados.</div>'}</section></div>`;
+    return `<div class="print-report-sheet compact-pdf">${config.logo_url?`<div class="print-logo"><img src="${config.logo_url}" alt="Logo"></div>`:""}<div class="print-header"><div><span class="print-kicker">ENCUESTA DE SERVICIO</span><h1>Reporte de retiros de servicio</h1><p>Detalle completo de las encuestas registradas</p></div><div class="print-generated">Generado: ${new Date().toLocaleString("es-CO")}</div></div><div class="print-summary"><div class="print-summary-card"><span>Total encuestas</span><strong>${rows.length}</strong></div><div class="print-summary-card"><span>Interesados en retomar</span><strong>${rows.filter(x=>x.interes_retomar==="SI").length}</strong></div><div class="print-summary-card"><span>No interesados</span><strong>${rows.filter(x=>x.interes_retomar==="NO").length}</strong></div></div><section class="print-table-section"><div class="print-table-title"><div><span class="print-kicker">RESPUESTAS</span><h2>Detalle individual</h2></div><strong>${rows.length} encuesta${rows.length===1?"":"s"}</strong></div>${cards||'<div class="print-empty-row" style="padding:20px">No hay registros para los filtros seleccionados.</div>'}</section></div>`;
   }
 
-  document.addEventListener("DOMContentLoaded",()=>{["seg-filter-from","seg-filter-to","seg-filter-user","seg-filter-att","seg-filter-pay"].forEach(k=>id(k)?.addEventListener("input",renderSeguimientoSurveys));id("seg-filter-clear")?.addEventListener("click",clearSegFilters);["srv-filter-from","srv-filter-to","srv-filter-user","srv-filter-service","srv-filter-retomar"].forEach(k=>id(k)?.addEventListener("input",renderServicioSurveys));id("srv-filter-clear")?.addEventListener("click",clearSrvFilters);
-    id("btn-seg-excel")?.addEventListener("click",()=>downloadSimpleCSV("seguimiento",getFilteredSeguimiento()));
-    id("btn-srv-excel")?.addEventListener("click",()=>downloadSimpleCSV("servicio",getFilteredServicio()));
+  function surveyDate(x){return (x.created_at||"").slice(0,10);}
+  function getFilteredSeguimiento(){return seguimientoSurveys;}
+  function getFilteredServicio(){return servicioSurveys;}
+  const _renderSeg=renderSeguimientoSurveys, _renderSrv=renderServicioSurveys;
+  renderSeguimientoSurveys=function(){const rows=getFilteredSeguimiento();const t=id("tabla-seguimiento-encuesta");if(!t)return;t.innerHTML=rows.map(x=>`<tr><td>${formatDate(surveyDate(x))}</td><td>${escapeHTML(surveyAdvisorName(x))}</td><td>${escapeHTML(x.usuario)}</td><td>${escapeHTML(x.como_se_entero||"—")}</td><td>${escapeHTML(x.fechas_pago||"—")}</td><td>${escapeHTML(x.medio_contrato||"—")}</td><td>${escapeHTML(x.atencion_asesor||"—")}</td><td>${escapeHTML(x.redes_sociales||"—")}</td><td>${escapeHTML(x.cobro_tecnico||"—")}</td><td>${escapeHTML(x.medios_pago||"—")}</td></tr>`).join("")||'<tr class="empty-row"><td colspan="10">No hay encuestas con los filtros seleccionados.</td></tr>';};
+  renderServicioSurveys=function(){const rows=getFilteredServicio();const t=id("tabla-servicio-encuesta");if(!t)return;t.innerHTML=rows.map(x=>`<tr><td>${formatDate(surveyDate(x))}</td><td>${escapeHTML(surveyAdvisorName(x))}</td><td>${escapeHTML(x.usuario)}</td><td>${escapeHTML(x.servicio_retirado)}</td><td>${escapeHTML(x.motivo_retiro||"—")}</td><td>${escapeHTML(x.interes_retomar)}</td><td>${escapeHTML(x.observaciones||"—")}</td></tr>`).join("")||'<tr class="empty-row"><td colspan="7">No hay encuestas con los filtros seleccionados.</td></tr>';};
+  function clearSegFilters(){["seg-filter-asesor","seg-filter-from","seg-filter-to","seg-filter-user"].forEach(k=>{if(id(k))id(k).value="";});loadSeguimientoSurveys();}
+  function clearSrvFilters(){["srv-filter-asesor","srv-filter-from","srv-filter-to","srv-filter-user"].forEach(k=>{if(id(k))id(k).value="";});loadServicioSurveys();}
+
+  document.addEventListener("DOMContentLoaded",()=>{
     id("btn-seg-preview")?.addEventListener("click",()=>previewReport(buildSeguimientoReportHTML));
     id("btn-seg-pdf")?.addEventListener("click",()=>downloadPDF(buildSeguimientoReportHTML,"reporte-seguimiento-cartera"));
+    id("btn-seg-excel")?.addEventListener("click",()=>downloadSimpleCSV("seguimiento",getFilteredSeguimiento()));
     id("btn-srv-preview")?.addEventListener("click",()=>previewReport(buildServicioReportHTML));
     id("btn-srv-pdf")?.addEventListener("click",()=>downloadPDF(buildServicioReportHTML,"reporte-servicio-cartera"));
+    id("btn-srv-excel")?.addEventListener("click",()=>downloadSimpleCSV("servicio",getFilteredServicio()));
   });
 
   window.setPago=setPago;window.deleteCall=deleteCall;window.editAdvisor=editAdvisor;window.toggleAdvisor=toggleAdvisor;window.deleteAdvisor=deleteAdvisor;window.resetAdvisorPassword=resetAdvisorPassword;
