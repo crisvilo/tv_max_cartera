@@ -5506,7 +5506,7 @@ var corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Max-Age": "86400"
 };
-var WORKER_VERSION = "date-call-optimization-2026-09-17-v22";
+var WORKER_VERSION = "config-logo-fix-2026-09-17-v23";
 var jsonHeaders = {
   ...corsHeaders,
   "Content-Type": "application/json; charset=utf-8"
@@ -6321,7 +6321,9 @@ async function handleGetTable(request, env, table) {
     }
     const sql = getDB(env);
     const columns = TABLE_COLUMNS[table].join(", ");
-    const query = `SELECT ${columns} FROM ${table} ORDER BY created_at DESC`;
+    // configuracioncr no tiene created_at; usa updated_at para evitar un 500.
+    const orderColumn = table === "configuracioncr" ? "updated_at" : "created_at";
+    const query = `SELECT ${columns} FROM ${table} ORDER BY ${orderColumn} DESC`;
     const result = await sql.query(query);
     return json({
       ok: true,
@@ -6354,6 +6356,41 @@ async function handlePostTable(request, env, table) {
     }
     const body = await request.json();
     const allowedColumns = TABLE_COLUMNS[table];
+
+    // El adaptador del frontend usa upsert para configuracioncr.
+    // Mantiene el registro id=1 y evita el error 400 al guardar el logo.
+    if (body?.action === "upsert") {
+      const data = body?.data && typeof body.data === "object" ? body.data : {};
+      const entries = Object.entries(data).filter(
+        ([key]) => allowedColumns.includes(key) && key !== "created_at" && key !== "updated_at"
+      );
+      if (entries.length === 0) {
+        return errorResponse("No hay datos para guardar", 400);
+      }
+      if (!Object.prototype.hasOwnProperty.call(data, "id")) {
+        return errorResponse("El upsert requiere el id del registro", 400);
+      }
+      const columns = entries.map(([key]) => key);
+      const values = entries.map(([, value]) => value);
+      const placeholders = values.map((_, index) => `$${index + 1}`).join(", ");
+      const assignments = columns
+        .filter(key => key !== "id")
+        .map(key => `${key} = EXCLUDED.${key}`);
+      assignments.push("updated_at = NOW()");
+      const query = `
+        INSERT INTO ${table} (${columns.join(", ")})
+        VALUES (${placeholders})
+        ON CONFLICT (id) DO UPDATE SET ${assignments.join(", ")}
+        RETURNING *
+      `;
+      const sql = getDB(env);
+      const result = await sql.query(query, values);
+      return json({
+        ok: true,
+        data: result
+      });
+    }
+
     const entries = Object.entries(body).filter(
       ([key]) => allowedColumns.includes(key) && key !== "id" && key !== "created_at" && key !== "updated_at"
     );
