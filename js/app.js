@@ -108,7 +108,7 @@
     }
   };
 
-  const LLAMADA_TYPES = ["Contestada", "No contestada", "Equivocada", "Sin especificar"];
+  const LLAMADA_TYPES = ["Contestada", "No contestada", "Equivocada"];
   // Zonas predeterminadas del sistema de cartera.
   const ZONAS = ["San Marcos", "Caucasia", "Caucasia Subsidiada", "Montelíbano", "La Apartada", "Buenavista"];
   // Tipo de gestión realizada en la llamada.
@@ -299,9 +299,11 @@
   }
 
   async function loadConfig(){
-    const {data,error}=await sbClient.from("configuracioncr").select("color_principal,logo_url").eq("id",1).maybeSingle();
-    if(error){console.error("CONFIG ERROR:",error);applyTheme();renderConfig();return;}
-    if(data) config=data; applyTheme(); renderConfig();
+    const r=await apiFetch("/api/config");
+    if(!r.ok){console.error("CONFIG ERROR:",r.body);applyTheme();renderConfig();return;}
+    const data=r.body?.data;
+    if(data && typeof data === "object") config={color_principal:data.color_principal||"#0ea5e9",logo_url:data.logo_url||""};
+    applyTheme(); renderConfig();
   }
 
   async function loadAdvisorCalls(){
@@ -371,7 +373,8 @@
     const zonaSeleccionada=value("zona"); if(!ZONAS.includes(zonaSeleccionada)){showToast("Selecciona una zona válida de la lista.",true);return;}
     const tipoGestionSeleccionado=value("tipoGestion") || "Sin especificar";
     const llamadaSeleccionada=value("tipoLlamada");
-    const tipoLlamada=LLAMADA_TYPES.includes(llamadaSeleccionada)?llamadaSeleccionada:"Sin especificar";
+    if(!LLAMADA_TYPES.includes(llamadaSeleccionada)){showToast("Selecciona el resultado de la llamada.",true);return;}
+    const tipoLlamada=llamadaSeleccionada;
     const row={asesor_id:currentUser.id,cliente:value("cliente"),llamada:tipoLlamada,tipo_gestion:tipoGestionSeleccionado,zona:zonaSeleccionada,whatsapp_enviado:whatsapp,whatsapp_mensaje:whatsapp?(value("whatsappMensaje")||null):null,whatsapp_respuesta:whatsapp?(value("whatsappRespuesta")||null):null,compromiso_pago:compromiso,fecha_compromiso:compromiso?id("fechaCompromiso").value:null,pago:pago,observaciones:value("observaciones")||null,fecha_llamada:id("fechaLlamada").value};
     if(!row.cliente||!row.zona||!row.fecha_llamada){showToast("Completa todos los campos obligatorios.",true);return;}
     const {data,error}=await sbClient.from("llamadascr").insert(row).select().single(); if(error){console.error("REGISTRO LLAMADA ERROR:",error);showToast(error.detail ? `${error.message}: ${error.detail}` : (error.message||"No fue posible registrar la llamada."),true);return;}
@@ -388,7 +391,8 @@
     const zonaSeleccionada=value("adminCallZona"); if(!ZONAS.includes(zonaSeleccionada)){showToast("Selecciona una zona válida de la lista.",true);return;}
     const tipoGestionSeleccionado=value("adminCallTipoGestion") || "Sin especificar";
     const llamadaSeleccionada=value("adminCallLlamada");
-    const tipoLlamada=LLAMADA_TYPES.includes(llamadaSeleccionada)?llamadaSeleccionada:"Sin especificar";
+    if(!LLAMADA_TYPES.includes(llamadaSeleccionada)){showToast("Selecciona el resultado de la llamada.",true);return;}
+    const tipoLlamada=llamadaSeleccionada;
     const row={asesor_id:currentUser.id,cliente:value("adminCallCliente"),llamada:tipoLlamada,tipo_gestion:tipoGestionSeleccionado,zona:zonaSeleccionada,whatsapp_enviado:whatsapp,whatsapp_mensaje:whatsapp?(value("adminCallWhatsappMensaje")||null):null,whatsapp_respuesta:whatsapp?(value("adminCallWhatsappRespuesta")||null):null,compromiso_pago:compromiso,fecha_compromiso:compromiso?id("adminCallFechaCompromiso").value:null,pago:pago,observaciones:value("adminCallObservaciones")||null,fecha_llamada:id("adminCallFecha").value};
     if(!row.cliente||!row.zona||!row.fecha_llamada){showToast("Completa todos los campos obligatorios.",true);return;}
     const {data,error}=await sbClient.from("llamadascr").insert(row).select(`*, perfilescr:asesor_id (id,nombre,apellido,zona,email,activo)`).single();
@@ -448,8 +452,8 @@
     const now=new Date(),from=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`,next=new Date(now.getFullYear(),now.getMonth()+1,1),to=`${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,"0")}-01`;
     const r=await getDashboardCached("admin",`/api/dashboard/admin?from=${from}&to=${to}`,forceRefresh);if(!r.ok){console.error(r.body);return;}
     const d=r.body?.data||{},totals=d.totals||{},rows=d.advisors||[];advisorDashboardStats=Object.fromEntries(rows.map(x=>[x.id,x]));setText("dash-total",totals.total||0);setText("dash-contestadas",totals.contestadas||0);setText("dash-nocontestadas",totals.no_contestadas||0);setText("dash-compromisos",totals.compromisos||0);setText("dash-pagos",totals.pagos||0);
-    const metaTotal=advisors.filter(a=>a.activo!==false).reduce((acc,a)=>acc+metaDe(a),0),done=Number(totals.total||0),adminPct=metaPct(done,metaTotal);setText("dash-admin-goal",metaTotal);setText("dash-admin-goal-done",done);setText("dash-admin-goal-pct",`${adminPct}%`);const bar=id("dash-admin-goal-bar");if(bar)bar.style.width=`${Math.min(100,adminPct)}%`;setText("dash-admin-goal-month",new Date(now.getFullYear(),now.getMonth(),1).toLocaleDateString("es-CO",{month:"long",year:"numeric"}));
-    const rowMap=new Map(rows.map(x=>[x.id,x]));id("dash-goals-list").innerHTML=advisors.filter(a=>a.activo!==false).map(a=>{const n=[a.nombre,a.apellido].filter(Boolean).join(" ")||a.email,r=rowMap.get(a.id)||{},count=Number(r.total||0),meta=metaDe(a),pct=metaPct(count,meta);return `<div class="goal-chart-row"><div class="goal-chart-head"><strong>${escapeHTML(n)}</strong><span>${count} de ${meta} llamadas · ${pct}%</span></div><div class="goal-track"><i style="width:${Math.min(100,pct)}%"></i></div></div>`;}).join("")||'<p class="muted">No hay asesores registrados.</p>';
+    const goalRows=rows.filter(a=>a.activo!==false),metaTotal=goalRows.reduce((acc,a)=>acc+metaDe(a),0),done=Number(totals.total||0),adminPct=metaPct(done,metaTotal);setText("dash-admin-goal",metaTotal);setText("dash-admin-goal-done",done);setText("dash-admin-goal-pct",`${adminPct}%`);const bar=id("dash-admin-goal-bar");if(bar)bar.style.width=`${Math.min(100,adminPct)}%`;setText("dash-admin-goal-month",new Date(now.getFullYear(),now.getMonth(),1).toLocaleDateString("es-CO",{month:"long",year:"numeric"}));
+    id("dash-goals-list").innerHTML=goalRows.map(a=>{const n=[a.nombre,a.apellido].filter(Boolean).join(" ")||a.email||"—",count=Number(a.total||0),meta=metaDe(a),pct=metaPct(count,meta);return `<div class="goal-chart-row"><div class="goal-chart-head"><strong>${escapeHTML(n)}</strong><span>${count} de ${meta} llamadas · ${pct}%</span></div><div class="goal-track"><i style="width:${Math.min(100,pct)}%"></i></div></div>`;}).join("")||'<p class="muted">No hay usuarios con meta registrados.</p>';
     const counts=[{t:"Contestada",n:Number(totals.contestadas||0)},{t:"No contestada",n:Number(totals.no_contestadas||0)},{t:"Equivocada",n:Number(totals.equivocadas||0)},{t:"Compromisos",n:Number(totals.compromisos||0)},{t:"Pagos",n:Number(totals.pagos||0)}],max=Math.max(1,...counts.map(x=>x.n));id("dash-services-list").innerHTML=counts.map(x=>`<div class="mini-bar-row"><span>${x.t}</span><div><i style="width:${x.n/max*100}%"></i></div><strong>${x.n}</strong></div>`).join("");
     const gestionCounts=TIPOS_GESTION.map(t=>({t,n:Number((totals.gestion||{})[t]||0)})),gestionMax=Math.max(1,...gestionCounts.map(x=>x.n));id("dash-gestion-list").innerHTML=gestionCounts.map(x=>`<div class="mini-bar-row"><span title="${escapeHTML(x.t)}">${escapeHTML(TIPOS_GESTION_CORTO[x.t]||x.t)}</span><div><i style="width:${x.n/gestionMax*100}%"></i></div><strong>${x.n}</strong></div>`).join("");
   }
@@ -525,8 +529,8 @@
   }
   function clearPasswordForm(){const form=id("change-password-form");if(form)form.reset();}
 
-  async function saveConfig(e){e.preventDefault();let logo=config.logo_url||"";const file=id("config-logo").files[0];if(file){if(file.size>2*1024*1024){showToast("La imagen debe pesar máximo 2 MB.",true);return;}logo=await fileToDataURL(file);}const color=id("config-color").value;const {error}=await sbClient.from("configuracioncr").upsert({id:1,color_principal:color,logo_url:logo,updated_by:currentUser.id},{onConflict:"id"});if(error){showToast(error.message,true);return;}config={color_principal:color,logo_url:logo};applyTheme();renderConfig();showToast("Configuración guardada.");}
-  async function removeLogo(){const {error}=await sbClient.from("configuracioncr").upsert({id:1,color_principal:config.color_principal,logo_url:"",updated_by:currentUser.id},{onConflict:"id"});if(error){showToast(error.message,true);return;}config.logo_url="";renderConfig();showToast("Imagen retirada del reporte.");}
+  async function saveConfig(e){e.preventDefault();let logo=config.logo_url||"";const file=id("config-logo").files[0];if(file){if(file.size>2*1024*1024){showToast("La imagen debe pesar máximo 2 MB.",true);return;}logo=await fileToDataURL(file);}const color=id("config-color").value;const r=await apiFetch("/api/config",{method:"PUT",body:JSON.stringify({color_principal:color,logo_url:logo})});if(!r.ok){console.error("CONFIG SAVE ERROR:",r.body);showToast(r.body?.error||"No fue posible guardar la configuración.",true);return;}const saved=r.body?.data||{};config={color_principal:saved.color_principal||color,logo_url:saved.logo_url||logo};applyTheme();renderConfig();showToast("Configuración guardada correctamente.");}
+  async function removeLogo(){const r=await apiFetch("/api/config",{method:"PUT",body:JSON.stringify({color_principal:config.color_principal,logo_url:""})});if(!r.ok){showToast(r.body?.error||"No fue posible retirar la imagen.",true);return;}config.logo_url="";renderConfig();showToast("Imagen retirada del reporte.");}
   function renderConfig(){id("config-color").value=config.color_principal||"#0ea5e9";id("logo-preview").innerHTML=config.logo_url?`<img src="${config.logo_url}" alt="Logo de empresa">`:'<span>LOGO</span>';}
   function applyTheme(){document.documentElement.style.setProperty("--purple-primary",config.color_principal||"#0ea5e9");}
 
