@@ -5506,7 +5506,7 @@ var corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Max-Age": "86400"
 };
-var WORKER_VERSION = "config-logo-fix-2026-09-17-v23";
+var WORKER_VERSION = "survey-report-optimization-2026-09-17-v24";
 var jsonHeaders = {
   ...corsHeaders,
   "Content-Type": "application/json; charset=utf-8"
@@ -6293,6 +6293,60 @@ async function handleCalls(request, env) {
   } catch(error){console.error("GET CALLS ERROR:",error);return errorResponse("Error obteniendo llamadas",500,error.message);}
 }
 __name(handleCalls,"handleCalls");
+async function handleSurveys(request, env) {
+  try {
+    const auth = await requireAuth(request, env);
+    if (!auth) return errorResponse("No autenticado", 401);
+    const url = new URL(request.url);
+    const tipo = String(url.searchParams.get("tipo") || "general").trim().toLowerCase();
+    const from = String(url.searchParams.get("from") || "").trim();
+    const to = String(url.searchParams.get("to") || "").trim();
+    const advisor = String(url.searchParams.get("asesor") || "").trim();
+    const client = String(url.searchParams.get("cliente") || "").trim();
+    const validDate = v => !v || /^\d{4}-\d{2}-\d{2}$/.test(v);
+    if (!["general", "seguimiento", "servicio"].includes(tipo)) return errorResponse("Tipo de encuesta inválido", 400);
+    if (!validDate(from) || !validDate(to)) return errorResponse("Fecha inválida", 400);
+    if (from && to && from > to) return errorResponse("La fecha desde no puede ser posterior a la fecha hasta", 400);
+
+    const sql = getDB(env), values = [], where = [];
+    let i = 1;
+    const isAdmin = String(auth.rol || "").toLowerCase() === "administrador";
+    const table = tipo === "general" ? "encuestascr" : tipo === "seguimiento" ? "encuestas_seguimientocr" : "encuestas_serviciocr";
+    const alias = "e";
+    const clientColumn = tipo === "general" ? "codigo_usuario" : "usuario";
+
+    if (!isAdmin) {
+      where.push(`${alias}.asesor_id = $${i++}`);
+      values.push(auth.sub);
+    } else if (advisor) {
+      where.push(`${alias}.asesor_id = $${i++}`);
+      values.push(advisor);
+    }
+    if (from) { where.push(`${alias}.created_at >= $${i++}::date`); values.push(from); }
+    if (to) { where.push(`${alias}.created_at < ($${i++}::date + INTERVAL '1 day')`); values.push(to); }
+    if (client) { where.push(`${alias}.${clientColumn} ILIKE $${i++}`); values.push(`%${client}%`); }
+
+    const selectByType = {
+      general: `e.id,e.llamada_id,e.asesor_id,e.codigo_usuario,e.calificacion_servicio,e.observacion_servicio,e.calificacion_tecnica,e.observacion_tecnica,e.calificacion_administrativa,e.observacion_administrativa,e.agilidad_averias,e.recomendaria,e.recomendacion_felicitacion,e.created_at,e.updated_at`,
+      seguimiento: `e.id,e.asesor_id,e.usuario,e.como_se_entero,e.fechas_pago,e.medio_contrato,e.atencion_asesor,e.redes_sociales,e.cobro_tecnico,e.medios_pago,e.created_at`,
+      servicio: `e.id,e.asesor_id,e.usuario,e.servicio_retirado,e.motivo_retiro,e.interes_retomar,e.observaciones,e.created_at`
+    };
+    const limit = (from || to || advisor || client) ? 5000 : 3;
+    const query = `SELECT ${selectByType[tipo]},p.id AS perfil_id,p.nombre AS asesor_nombre,p.apellido AS asesor_apellido,p.email AS asesor_email,p.rol AS asesor_rol,p.activo AS asesor_activo FROM ${table} e LEFT JOIN perfilescr p ON p.id=e.asesor_id WHERE ${where.length ? where.join(" AND ") : "TRUE"} ORDER BY e.created_at DESC,e.id DESC LIMIT ${limit}`;
+    const result = await sql.query(query, values);
+    const data = result.map(r => ({
+      ...r,
+      perfilescr: r.perfil_id ? { id:r.perfil_id,nombre:r.asesor_nombre,apellido:r.asesor_apellido,email:r.asesor_email,rol:r.asesor_rol,activo:r.asesor_activo } : null
+    }));
+    data.forEach(r => { delete r.perfil_id; delete r.asesor_nombre; delete r.asesor_apellido; delete r.asesor_email; delete r.asesor_rol; delete r.asesor_activo; });
+    return json({ ok:true, data, limited: !(from || to || advisor || client) });
+  } catch(error) {
+    console.error("GET SURVEYS ERROR:", error);
+    return errorResponse("Error obteniendo encuestas", 500, error.message);
+  }
+}
+__name(handleSurveys,"handleSurveys");
+
 async function handleAdminDashboard(request, env) {
   try { const auth=await requireAuth(request,env); if(!auth||String(auth.rol||"").toLowerCase()!=="administrador")return errorResponse("No autorizado",403); const u=new URL(request.url),from=u.searchParams.get("from")||"",to=u.searchParams.get("to")||""; if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to))return errorResponse("Periodo inválido",400); const sql=getDB(env); const advisors=await sql.query(`SELECT p.id,p.nombre,p.apellido,p.email,p.meta_mensual,p.activo,COUNT(l.id)::int AS total,COUNT(l.id) FILTER (WHERE l.llamada='Contestada')::int AS contestadas,COUNT(l.id) FILTER (WHERE l.llamada='No contestada')::int AS no_contestadas,COUNT(l.id) FILTER (WHERE l.llamada='Equivocada')::int AS equivocadas,COUNT(l.id) FILTER (WHERE l.compromiso_pago=true)::int AS compromisos,COUNT(l.id) FILTER (WHERE l.pago=true)::int AS pagos FROM perfilescr p LEFT JOIN llamadascr l ON l.asesor_id=p.id AND l.fecha_llamada >= $1 AND l.fecha_llamada < $2 WHERE p.rol='asesor' GROUP BY p.id ORDER BY p.nombre,p.apellido`,[from,to]); const totals=await sql.query(`SELECT COUNT(*)::int AS total,COUNT(*) FILTER (WHERE llamada='Contestada')::int AS contestadas,COUNT(*) FILTER (WHERE llamada='No contestada')::int AS no_contestadas,COUNT(*) FILTER (WHERE llamada='Equivocada')::int AS equivocadas,COUNT(*) FILTER (WHERE compromiso_pago=true)::int AS compromisos,COUNT(*) FILTER (WHERE pago=true)::int AS pagos FROM llamadascr WHERE fecha_llamada >= $1 AND fecha_llamada < $2`,[from,to]); const gr=await sql.query(`SELECT tipo_gestion,COUNT(*)::int AS total FROM llamadascr WHERE fecha_llamada >= $1 AND fecha_llamada < $2 GROUP BY tipo_gestion`,[from,to]); const gestion={};gr.forEach(x=>gestion[x.tipo_gestion||""]=Number(x.total||0));return json({ok:true,data:{advisors,totals:{...(totals[0]||{}),gestion}}}); }
   catch(error){console.error("ADMIN DASHBOARD ERROR:",error);return errorResponse("Error obteniendo dashboard mensual",500,error.message);}
@@ -6578,6 +6632,7 @@ async function router(request, env) {
     return await handleRegister(request, env);
   }
   if (pathname === "/api/calls" && method === "GET") return await handleCalls(request, env);
+  if (pathname === "/api/surveys" && method === "GET") return await handleSurveys(request, env);
   if (pathname === "/api/dashboard/admin" && method === "GET") return await handleAdminDashboard(request, env);
   if (pathname === "/api/dashboard/advisor" && method === "GET") return await handleAdvisorDashboard(request, env);
   if (pathname === "/api/admin/users" && method === "GET") {
