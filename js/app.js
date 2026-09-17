@@ -118,6 +118,37 @@
   let advisorDashboardStats = {};
   let asesoresSeleccionados = []; // [] = todos los asesores
 
+  // Caché en memoria y deduplicación de consultas del dashboard.
+  // Se conserva durante la sesión y solo se renueva al pulsar Actualizar.
+  const dashboardCache = new Map();
+  const dashboardInFlight = new Map();
+  async function getDashboardCached(key, path, forceRefresh=false){
+    if(!forceRefresh && dashboardCache.has(key)) return dashboardCache.get(key);
+    if(!forceRefresh && dashboardInFlight.has(key)) return dashboardInFlight.get(key);
+    const promise = apiFetch(path).finally(()=>dashboardInFlight.delete(key));
+    dashboardInFlight.set(key,promise);
+    const result = await promise;
+    if(result.ok) dashboardCache.set(key,result);
+    return result;
+  }
+  function invalidateDashboardCache(key){
+    if(key) dashboardCache.delete(key);
+    else dashboardCache.clear();
+  }
+  async function refreshCurrentDashboard(){
+    const admin=isCurrentAdmin(), key=admin ? "admin" : `advisor:${currentUser?.id||""}`;
+    invalidateDashboardCache(key);
+    const btn=id(admin ? "btn-refresh-admin-dashboard" : "btn-refresh-advisor-dashboard");
+    if(btn){btn.disabled=true;btn.classList.add("is-refreshing");}
+    try{
+      if(admin) await loadAdminDashboard(true);
+      else await loadAdvisorDashboard(true);
+      showToast("Datos del dashboard actualizados.");
+    }finally{
+      if(btn){btn.disabled=false;btn.classList.remove("is-refreshing");}
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", async () => {
     bindEvents(); setTodayDefault(); setAdminCallTodayDefault(); showAuthView(); applyTheme();
     toggleWhatsappFields(); toggleCompromisoField(); toggleAdminWhatsappFields(); toggleAdminCompromisoField();
@@ -146,6 +177,8 @@
     on("btn-show-register", "click", () => { id("auth-view")?.classList.add("hidden"); id("register-view")?.classList.remove("hidden"); });
     on("btn-back-login", "click", showAuthView);
     on("btn-logout", "click", logout);
+    on("btn-refresh-admin-dashboard", "click", refreshCurrentDashboard);
+    on("btn-refresh-advisor-dashboard", "click", refreshCurrentDashboard);
     on("btn-menu", "click", () => id("sidebar")?.classList.toggle("open"));
     on("btn-close-menu", "click", closeSidebar);
 
@@ -373,7 +406,7 @@
   function updateCallLocal(data){const i=calls.findIndex(x=>x.id===data.id);if(i>=0)calls[i]=data;renderAdmin();updateAdminDashboard();}
   async function deleteCall(callId){if(!confirm("¿Eliminar definitivamente esta llamada? Esta acción no se puede deshacer."))return;const {error}=await sbClient.from("llamadascr").delete().eq("id",callId);if(error){showToast("No fue posible eliminar la llamada. Verifica las políticas RLS.",true);return;}calls=calls.filter(x=>x.id!==callId);renderAdmin();updateAdminDashboard();showToast("Llamada eliminada.");}
 
-  function buildSidebar(){const nav=id("sidebar-nav");const admin=isCurrentAdmin();const items=admin?[ ["admin-dashboard","▦","Dashboard"],["vista-admin","＋","Registrar llamada","form"],["vista-admin","▤","Ver llamadas","report"],["vista-encuestas-hub","☑","Encuestas"],["vista-usuarios","＋","Registrar asesor","form"],["vista-usuarios","▤","Reporte asesores","report"],["vista-configuracion","⚙","Configuración"],["vista-respaldo","⭳","Respaldo"] ]:[["vista-asesor","▦","Mi dashboard"],["vista-asesor","＋","Registrar llamada"],["vista-asesor","▤","Mis llamadas"],["vista-encuestas-hub","☑","Encuestas"]];nav.innerHTML=items.map(([target,icon,label,mode])=>`<button class="nav-item" type="button" data-target="${target}" data-mode="${mode||''}" data-anchor="${target==='vista-asesor'?label:''}"><span>${icon}</span>${label}</button>`).join("");nav.querySelectorAll(".nav-item").forEach(b=>b.addEventListener("click",()=>{showView(b.dataset.target);if(b.dataset.mode)setSectionMode(b.dataset.target,b.dataset.mode);if(b.dataset.anchor==="Registrar llamada")id("asesor-form-section").scrollIntoView({behavior:"smooth"});if(b.dataset.anchor==="Mis llamadas")document.querySelector("#vista-asesor .table-card").scrollIntoView({behavior:"smooth"});closeSidebar();}));applyRoleVisibility();}
+  function buildSidebar(){const nav=id("sidebar-nav");const admin=isCurrentAdmin();const items=admin?[ ["admin-dashboard","▦","Dashboard"],["admin-dashboard","↻","Actualizar datos","refresh"],["vista-admin","＋","Registrar llamada","form"],["vista-admin","▤","Ver llamadas","report"],["vista-encuestas-hub","☑","Encuestas"],["vista-usuarios","＋","Registrar asesor","form"],["vista-usuarios","▤","Reporte asesores","report"],["vista-configuracion","⚙","Configuración"],["vista-respaldo","⭳","Respaldo"] ]:[["vista-asesor","▦","Mi dashboard"],["vista-asesor","↻","Actualizar datos","refresh"],["vista-asesor","＋","Registrar llamada"],["vista-asesor","▤","Mis llamadas"],["vista-encuestas-hub","☑","Encuestas"]];nav.innerHTML=items.map(([target,icon,label,mode])=>`<button class="nav-item" type="button" data-target="${target}" data-mode="${mode||''}" data-anchor="${target==='vista-asesor'?label:''}"><span>${icon}</span>${label}</button>`).join("");nav.querySelectorAll(".nav-item").forEach(b=>b.addEventListener("click",()=>{if(b.dataset.mode==="refresh"){refreshCurrentDashboard();closeSidebar();return;}showView(b.dataset.target);if(b.dataset.mode)setSectionMode(b.dataset.target,b.dataset.mode);if(b.dataset.anchor==="Registrar llamada")id("asesor-form-section").scrollIntoView({behavior:"smooth"});if(b.dataset.anchor==="Mis llamadas")document.querySelector("#vista-asesor .table-card").scrollIntoView({behavior:"smooth"});closeSidebar();}));applyRoleVisibility();}
   function applyRoleVisibility(){const admin=isCurrentAdmin();document.querySelectorAll(".admin-only").forEach(el=>el.classList.toggle("hidden",!admin));}
   function closeSidebar(){id("sidebar").classList.remove("open");}
 
@@ -411,18 +444,18 @@
   function nombreAsesor(a){return [a.nombre,a.apellido].filter(Boolean).join(" ")||a.email||"Sin asesor";}
   function asesoresComparadosTexto(){return asesoresSeleccionados.length?advisors.filter(a=>asesoresSeleccionados.includes(a.id)).map(nombreAsesor).join(", "):"Todos los asesores";}
 
-  async function loadAdminDashboard(){
+  async function loadAdminDashboard(forceRefresh=false){
     const now=new Date(),from=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`,next=new Date(now.getFullYear(),now.getMonth()+1,1),to=`${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,"0")}-01`;
-    const r=await apiFetch(`/api/dashboard/admin?from=${from}&to=${to}`);if(!r.ok){console.error(r.body);return;}
+    const r=await getDashboardCached("admin",`/api/dashboard/admin?from=${from}&to=${to}`,forceRefresh);if(!r.ok){console.error(r.body);return;}
     const d=r.body?.data||{},totals=d.totals||{},rows=d.advisors||[];advisorDashboardStats=Object.fromEntries(rows.map(x=>[x.id,x]));setText("dash-total",totals.total||0);setText("dash-contestadas",totals.contestadas||0);setText("dash-nocontestadas",totals.no_contestadas||0);setText("dash-compromisos",totals.compromisos||0);setText("dash-pagos",totals.pagos||0);
     const metaTotal=advisors.filter(a=>a.activo!==false).reduce((acc,a)=>acc+metaDe(a),0),done=Number(totals.total||0),adminPct=metaPct(done,metaTotal);setText("dash-admin-goal",metaTotal);setText("dash-admin-goal-done",done);setText("dash-admin-goal-pct",`${adminPct}%`);const bar=id("dash-admin-goal-bar");if(bar)bar.style.width=`${Math.min(100,adminPct)}%`;setText("dash-admin-goal-month",new Date(now.getFullYear(),now.getMonth(),1).toLocaleDateString("es-CO",{month:"long",year:"numeric"}));
     const rowMap=new Map(rows.map(x=>[x.id,x]));id("dash-goals-list").innerHTML=advisors.filter(a=>a.activo!==false).map(a=>{const n=[a.nombre,a.apellido].filter(Boolean).join(" ")||a.email,r=rowMap.get(a.id)||{},count=Number(r.total||0),meta=metaDe(a),pct=metaPct(count,meta);return `<div class="goal-chart-row"><div class="goal-chart-head"><strong>${escapeHTML(n)}</strong><span>${count} de ${meta} llamadas · ${pct}%</span></div><div class="goal-track"><i style="width:${Math.min(100,pct)}%"></i></div></div>`;}).join("")||'<p class="muted">No hay asesores registrados.</p>';
     const counts=[{t:"Contestada",n:Number(totals.contestadas||0)},{t:"No contestada",n:Number(totals.no_contestadas||0)},{t:"Equivocada",n:Number(totals.equivocadas||0)},{t:"Compromisos",n:Number(totals.compromisos||0)},{t:"Pagos",n:Number(totals.pagos||0)}],max=Math.max(1,...counts.map(x=>x.n));id("dash-services-list").innerHTML=counts.map(x=>`<div class="mini-bar-row"><span>${x.t}</span><div><i style="width:${x.n/max*100}%"></i></div><strong>${x.n}</strong></div>`).join("");
     const gestionCounts=TIPOS_GESTION.map(t=>({t,n:Number((totals.gestion||{})[t]||0)})),gestionMax=Math.max(1,...gestionCounts.map(x=>x.n));id("dash-gestion-list").innerHTML=gestionCounts.map(x=>`<div class="mini-bar-row"><span title="${escapeHTML(x.t)}">${escapeHTML(TIPOS_GESTION_CORTO[x.t]||x.t)}</span><div><i style="width:${x.n/gestionMax*100}%"></i></div><strong>${x.n}</strong></div>`).join("");
   }
-  function updateAdminDashboard(){return loadAdminDashboard();}
-  async function loadAdvisorDashboard(){
-    const now=new Date(),from=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`,next=new Date(now.getFullYear(),now.getMonth()+1,1),to=`${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,"0")}-01`;const r=await apiFetch(`/api/dashboard/advisor?from=${from}&to=${to}`);if(!r.ok)return;const t=r.body?.data?.totals||{},meta=metaDe(currentProfile),total=Number(t.total||0),pct=metaPct(total,meta);setText("asesor-total-count",total);setText("asesor-contestadas-count",Number(t.contestadas||0));setText("asesor-nocontestadas-count",Number(t.no_contestadas||0));setText("asesor-pagos-count",Number(t.pagos||0));setText("asesor-compromisos-count",Number(t.compromisos||0));setText("asesor-meta-count",meta);setText("asesor-meta-pct",`${pct}%`);const bar=id("asesor-meta-bar");if(bar)bar.style.width=`${Math.min(100,pct)}%`;
+  function updateAdminDashboard(){return loadAdminDashboard(false);}
+  async function loadAdvisorDashboard(forceRefresh=false){
+    const now=new Date(),from=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`,next=new Date(now.getFullYear(),now.getMonth()+1,1),to=`${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,"0")}-01`;const r=await getDashboardCached(`advisor:${currentUser?.id||""}`,`/api/dashboard/advisor?from=${from}&to=${to}`,forceRefresh);if(!r.ok)return;const t=r.body?.data?.totals||{},meta=metaDe(currentProfile),total=Number(t.total||0),pct=metaPct(total,meta);setText("asesor-total-count",total);setText("asesor-contestadas-count",Number(t.contestadas||0));setText("asesor-nocontestadas-count",Number(t.no_contestadas||0));setText("asesor-pagos-count",Number(t.pagos||0));setText("asesor-compromisos-count",Number(t.compromisos||0));setText("asesor-meta-count",meta);setText("asesor-meta-pct",`${pct}%`);const bar=id("asesor-meta-bar");if(bar)bar.style.width=`${Math.min(100,pct)}%`;
   }
 
   function renderUsers(){
