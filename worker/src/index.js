@@ -5506,7 +5506,7 @@ var corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Max-Age": "86400"
 };
-var WORKER_VERSION = "neon-login-fix-2026-09-15-v4";
+var WORKER_VERSION = "date-call-optimization-2026-09-17-v22";
 var jsonHeaders = {
   ...corsHeaders,
   "Content-Type": "application/json; charset=utf-8"
@@ -6271,6 +6271,39 @@ var TABLE_COLUMNS = {
     "updated_at"
   ]
 };
+async function handleCalls(request, env) {
+  try {
+    const auth = await requireAuth(request, env);
+    if (!auth) return errorResponse("No autenticado", 401);
+    const url = new URL(request.url), fromRaw = String(url.searchParams.get("from") || "").trim(), toRaw = String(url.searchParams.get("to") || "").trim(), advisorsRaw = String(url.searchParams.get("asesores") || "").trim();
+    const validDate = v => !v || /^\d{4}-\d{2}-\d{2}$/.test(v);
+    if (!validDate(fromRaw) || !validDate(toRaw)) return errorResponse("Fecha inválida", 400);
+    if (fromRaw && toRaw && fromRaw > toRaw) return errorResponse("La fecha desde no puede ser posterior a la fecha hasta", 400);
+    const sql = getDB(env), values = [], where = []; let i = 1;
+    const isAdmin = String(auth.rol || "").toLowerCase() === "administrador";
+    if (!isAdmin) { where.push(`l.asesor_id = $${i++}`); values.push(auth.sub); }
+    else if (advisorsRaw) { const ids = advisorsRaw.split(",").map(x=>x.trim()).filter(Boolean); if(ids.length){const ph=ids.map(()=>`$${i++}`);where.push(`l.asesor_id IN (${ph.join(",")})`);values.push(...ids);} }
+    const explicit = !!fromRaw || !!toRaw || !!advisorsRaw;
+    if(fromRaw){where.push(`l.fecha_llamada >= $${i++}`);values.push(fromRaw);} if(toRaw){where.push(`l.fecha_llamada <= $${i++}`);values.push(toRaw);} if(!fromRaw&&!toRaw)where.push(`l.fecha_llamada = CURRENT_DATE`);
+    const columns="l.id,l.asesor_id,l.cliente,l.llamada,l.tipo_gestion,l.zona,l.whatsapp_enviado,l.whatsapp_mensaje,l.whatsapp_respuesta,l.compromiso_pago,l.fecha_compromiso,l.pago,l.observaciones,l.fecha_llamada,l.created_at,l.updated_at,p.id AS perfil_id,p.nombre AS asesor_nombre,p.apellido AS asesor_apellido,p.zona AS asesor_zona,p.email AS asesor_email,p.activo AS asesor_activo";
+    const limit=explicit?5000:10, query=`SELECT ${columns} FROM llamadascr l LEFT JOIN perfilescr p ON p.id=l.asesor_id WHERE ${where.join(" AND ")} ORDER BY l.fecha_llamada DESC,l.id DESC LIMIT ${limit}`;
+    const result=await sql.query(query,values); const data=result.map(r=>({...r,perfilescr:r.perfil_id?{id:r.perfil_id,nombre:r.asesor_nombre,apellido:r.asesor_apellido,zona:r.asesor_zona,email:r.asesor_email,activo:r.asesor_activo}:null}));
+    data.forEach(r=>{delete r.perfil_id;delete r.asesor_nombre;delete r.asesor_apellido;delete r.asesor_zona;delete r.asesor_email;delete r.asesor_activo;});
+    return json({ok:true,data,limited:!explicit});
+  } catch(error){console.error("GET CALLS ERROR:",error);return errorResponse("Error obteniendo llamadas",500,error.message);}
+}
+__name(handleCalls,"handleCalls");
+async function handleAdminDashboard(request, env) {
+  try { const auth=await requireAuth(request,env); if(!auth||String(auth.rol||"").toLowerCase()!=="administrador")return errorResponse("No autorizado",403); const u=new URL(request.url),from=u.searchParams.get("from")||"",to=u.searchParams.get("to")||""; if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to))return errorResponse("Periodo inválido",400); const sql=getDB(env); const advisors=await sql.query(`SELECT p.id,p.nombre,p.apellido,p.email,p.meta_mensual,p.activo,COUNT(l.id)::int AS total,COUNT(l.id) FILTER (WHERE l.llamada='Contestada')::int AS contestadas,COUNT(l.id) FILTER (WHERE l.llamada='No contestada')::int AS no_contestadas,COUNT(l.id) FILTER (WHERE l.llamada='Equivocada')::int AS equivocadas,COUNT(l.id) FILTER (WHERE l.compromiso_pago=true)::int AS compromisos,COUNT(l.id) FILTER (WHERE l.pago=true)::int AS pagos FROM perfilescr p LEFT JOIN llamadascr l ON l.asesor_id=p.id AND l.fecha_llamada >= $1 AND l.fecha_llamada < $2 WHERE p.rol='asesor' GROUP BY p.id ORDER BY p.nombre,p.apellido`,[from,to]); const totals=await sql.query(`SELECT COUNT(*)::int AS total,COUNT(*) FILTER (WHERE llamada='Contestada')::int AS contestadas,COUNT(*) FILTER (WHERE llamada='No contestada')::int AS no_contestadas,COUNT(*) FILTER (WHERE llamada='Equivocada')::int AS equivocadas,COUNT(*) FILTER (WHERE compromiso_pago=true)::int AS compromisos,COUNT(*) FILTER (WHERE pago=true)::int AS pagos FROM llamadascr WHERE fecha_llamada >= $1 AND fecha_llamada < $2`,[from,to]); const gr=await sql.query(`SELECT tipo_gestion,COUNT(*)::int AS total FROM llamadascr WHERE fecha_llamada >= $1 AND fecha_llamada < $2 GROUP BY tipo_gestion`,[from,to]); const gestion={};gr.forEach(x=>gestion[x.tipo_gestion||""]=Number(x.total||0));return json({ok:true,data:{advisors,totals:{...(totals[0]||{}),gestion}}}); }
+  catch(error){console.error("ADMIN DASHBOARD ERROR:",error);return errorResponse("Error obteniendo dashboard mensual",500,error.message);}
+}
+__name(handleAdminDashboard,"handleAdminDashboard");
+async function handleAdvisorDashboard(request, env) {
+  try { const auth=await requireAuth(request,env);if(!auth)return errorResponse("No autenticado",401);const u=new URL(request.url),from=u.searchParams.get("from")||"",to=u.searchParams.get("to")||"";if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to))return errorResponse("Periodo inválido",400);const sql=getDB(env);const rows=await sql.query(`SELECT COUNT(*)::int AS total,COUNT(*) FILTER (WHERE llamada='Contestada')::int AS contestadas,COUNT(*) FILTER (WHERE llamada='No contestada')::int AS no_contestadas,COUNT(*) FILTER (WHERE llamada='Equivocada')::int AS equivocadas,COUNT(*) FILTER (WHERE compromiso_pago=true)::int AS compromisos,COUNT(*) FILTER (WHERE pago=true)::int AS pagos FROM llamadascr WHERE asesor_id=$1 AND fecha_llamada >= $2 AND fecha_llamada < $3`,[auth.sub,from,to]);return json({ok:true,data:{totals:rows[0]||{total:0,contestadas:0,no_contestadas:0,equivocadas:0,compromisos:0,pagos:0}}}); }
+  catch(error){console.error("ADVISOR DASHBOARD ERROR:",error);return errorResponse("Error obteniendo dashboard del asesor",500,error.message);}
+}
+__name(handleAdvisorDashboard,"handleAdvisorDashboard");
+
 async function handleGetTable(request, env, table) {
   try {
     if (!ALLOWED_TABLES.has(table)) {
@@ -6507,6 +6540,9 @@ async function router(request, env) {
   if (pathname === "/api/auth/register" && method === "POST") {
     return await handleRegister(request, env);
   }
+  if (pathname === "/api/calls" && method === "GET") return await handleCalls(request, env);
+  if (pathname === "/api/dashboard/admin" && method === "GET") return await handleAdminDashboard(request, env);
+  if (pathname === "/api/dashboard/advisor" && method === "GET") return await handleAdvisorDashboard(request, env);
   if (pathname === "/api/admin/users" && method === "GET") {
     return await handleUsers(request, env);
   }
