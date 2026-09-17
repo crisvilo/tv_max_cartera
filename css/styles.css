@@ -595,3 +595,47 @@ tbody tr:last-child td { border-bottom: 0; }
 .report-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;align-items:end;margin-bottom:18px;padding:16px;border:1px solid var(--border,#dbe3ee);border-radius:14px;background:rgba(255,255,255,.45)}
 .report-filters .form-group{margin:0}.report-filters button{height:42px}
 .empty-state{text-align:center;padding:24px;color:#64748b}
+
+
+/* ===== Optimización de impresión y PDF ===== */
+.print-report-sheet.compact-pdf { max-width: 1100px; }
+.compact-pdf .print-header { gap: 12px; padding-bottom: 9px; margin-bottom: 9px; }
+.compact-pdf .print-header h1 { font-size: 20px; margin-bottom: 3px; }
+.compact-pdf .print-header p { font-size: 9px; }
+.compact-pdf .print-kicker { font-size: 8px; margin-bottom: 3px; }
+.compact-pdf .print-generated { font-size: 8px; }
+.compact-pdf .print-summary { grid-template-columns: repeat(6,1fr); gap: 5px; margin-bottom: 8px; }
+.compact-pdf .print-summary-card { padding: 6px 7px; border-radius: 7px; }
+.compact-pdf .print-summary-card span { font-size: 7px; margin-bottom: 2px; }
+.compact-pdf .print-summary-card strong { font-size: 14px; }
+.compact-pdf .print-charts { gap: 7px; margin-bottom: 9px; }
+.compact-pdf .print-chart-card { min-height: 105px; padding: 6px 8px; border-radius: 7px; }
+.compact-pdf .print-chart-card h2 { font-size: 9px; margin-bottom: 3px; }
+.compact-pdf .print-chart-figure svg { width: 78px; height: 78px; flex-basis: 78px; }
+.compact-pdf .print-legend { font-size: 7px; gap: 2px; }
+.compact-pdf .print-dot { width: 5px; height: 5px; flex-basis: 5px; }
+.compact-pdf .print-table-title { margin-bottom: 4px; padding-bottom: 4px; }
+.compact-pdf .print-table-title h2 { font-size: 11px; }
+.compact-pdf .print-table-title > strong { font-size: 8px; }
+.compact-pdf .print-report-sheet table, .compact-pdf table { min-width: 0; table-layout: fixed; font-size: 7px; }
+.compact-pdf .print-report-sheet th, .compact-pdf .print-report-sheet td, .compact-pdf th, .compact-pdf td { padding: 3px 4px; line-height: 1.2; overflow-wrap: anywhere; word-break: break-word; }
+.compact-pdf .print-final-goal { margin: 6px 0 8px; padding: 8px 10px; gap: 8px; border-radius: 8px; }
+.compact-pdf .print-final-goal-title strong { font-size: 10px; }
+.compact-pdf .print-final-goal-title span, .compact-pdf .print-final-goal-metric span { font-size: 7px; }
+.compact-pdf .print-final-goal-metric strong { font-size: 13px; }
+.compact-pdf .print-final-goal-track { height: 7px; }
+.survey-print-sheet table { min-width: 0 !important; table-layout: fixed; font-size: 7px !important; width: 100%; }
+.survey-print-sheet th, .survey-print-sheet td { padding: 3px 4px !important; line-height: 1.2; overflow-wrap: anywhere; word-break: break-word; }
+.survey-print-sheet .print-header { gap: 10px; padding-bottom: 8px; margin-bottom: 8px; }
+.survey-print-sheet .print-header h1 { font-size: 18px; }
+.survey-print-sheet .print-summary { grid-template-columns: repeat(3,1fr); gap: 6px; margin-bottom: 8px; }
+.survey-print-sheet .print-summary-card { padding: 6px 8px; }
+.survey-print-sheet .print-summary-card strong { font-size: 14px; }
+.report-detail-section { page-break-inside: auto; }
+.users-table { min-width: 900px; }
+#filtroAsesorBuscar { min-width: 260px; }
+@media print {
+  .compact-pdf .print-table-section { page-break-inside: auto; }
+  .compact-pdf .print-report-sheet table { page-break-inside: auto; }
+  .compact-pdf tr { page-break-inside: avoid; }
+}
