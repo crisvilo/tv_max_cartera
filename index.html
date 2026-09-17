@@ -93,7 +93,7 @@
         </form>
       </div>
 
-      <div class="card table-card"><div class="card-heading table-heading"><div><span class="section-kicker">HISTORIAL</span><h3>Mis llamadas</h3><p class="muted">Filtra por fecha para descargar tu informe diario.</p></div><div class="table-tools"><input id="filtroAsesor" type="search" placeholder="Buscar cliente, zona u observación..."><input id="filtroAsesorDesde" type="date" title="Desde"><input id="filtroAsesorHasta" type="date" title="Hasta"><button id="btn-limpiar-filtro-asesor" class="btn-secondary" type="button">Limpiar</button><button id="btn-asesor-report" class="btn-secondary" type="button">👁 Ver mi reporte</button><button id="btn-asesor-print" class="btn-secondary" type="button">🖨 Imprimir</button><button id="btn-asesor-pdf" class="btn-primary" type="button">📄 Descargar PDF</button></div></div><div class="table-wrapper"><table><thead><tr><th>ID</th><th>Cliente</th><th>Llamada</th><th>Tipo de llamada</th><th>Zona</th><th>WhatsApp</th><th>Compromiso</th><th>Pago</th><th>Fecha</th></tr></thead><tbody id="tabla-asesor"></tbody></table></div></div>
+      <div class="card table-card"><div class="card-heading table-heading"><div><span class="section-kicker">HISTORIAL</span><h3>Mis llamadas</h3><p class="muted">Filtra por fecha para descargar tu informe diario.</p></div><div class="table-tools"><input id="filtroAsesorDesde" type="date" title="Fecha desde"><input id="filtroAsesorHasta" type="date" title="Fecha hasta"><button id="btn-limpiar-filtro-asesor" class="btn-secondary" type="button">Limpiar</button><button id="btn-asesor-report" class="btn-secondary" type="button">👁 Ver mi reporte</button><button id="btn-asesor-print" class="btn-secondary" type="button">🖨 Imprimir</button><button id="btn-asesor-pdf" class="btn-primary" type="button">📄 Descargar PDF</button></div></div><div class="table-wrapper"><table><thead><tr><th>ID</th><th>Cliente</th><th>Llamada</th><th>Tipo de llamada</th><th>Zona</th><th>WhatsApp</th><th>Compromiso</th><th>Pago</th><th>Fecha</th></tr></thead><tbody id="tabla-asesor"></tbody></table></div></div>
 
       <div class="card form-card password-card">
         <div class="card-heading"><div><span class="section-kicker">SEGURIDAD</span><h3>Cambiar mi contraseña</h3><p class="muted">Actualiza tu contraseña de acceso. Debes conocer la contraseña actual.</p></div></div>
@@ -150,8 +150,7 @@
 
       <div class="survey-panel hidden" data-panel="report">
       <div class="card filters-card"><div class="card-heading"><div><span class="section-kicker">REPORTES</span><h3>Filtros de consulta</h3></div><div class="filter-actions"><button id="btn-clear-filters" class="btn-secondary" type="button">Limpiar filtros</button><button id="btn-preview-report" class="btn-secondary" type="button">👁 Vista previa</button><button id="btn-print-report" class="btn-primary" type="button">🖨 Imprimir</button><button id="btn-pdf-report" class="btn-primary" type="button">📄 Descargar PDF</button><button id="btn-excel-report" class="btn-secondary" type="button">📊 Descargar Excel</button></div></div><div class="filters-grid">
-        <div class="form-group"><label for="filtroAdminTexto">Buscar</label><input id="filtroAdminTexto" type="search" placeholder="Cliente, zona, observaciones..."></div>
-        <div class="form-group"><label for="ms-asesores-toggle">Asesores <small class="muted">(elige varios para comparar)</small></label>
+        <div class="form-group"><label for="ms-asesores-toggle">Asesores <small class="muted">(opcional, puedes comparar varios)</small></label>
           <div class="multiselect" id="ms-asesores">
             <button type="button" class="multiselect-toggle" id="ms-asesores-toggle">Todos los asesores</button>
             <div class="multiselect-panel hidden" id="ms-asesores-panel">
@@ -160,12 +159,8 @@
             </div>
           </div>
         </div>
-        <div class="form-group"><label for="filtroLlamadaAdmin">Llamada</label><select id="filtroLlamadaAdmin"><option value="">Todas</option><option value="Contestada">Contestadas</option><option value="No contestada">No contestadas</option><option value="Equivocada">Equivocadas</option></select></div>
-        <div class="form-group"><label for="filtroTipoGestionAdmin">Tipo de llamada</label><select id="filtroTipoGestionAdmin"><option value="">Todos</option></select></div>
-        <div class="form-group"><label for="filtroCompromisoAdmin">Compromiso</label><select id="filtroCompromisoAdmin"><option value="">Todos</option><option value="true">Con compromiso</option><option value="false">Sin compromiso</option></select></div>
-        <div class="form-group"><label for="filtroPagoAdmin">Pago</label><select id="filtroPagoAdmin"><option value="">Todos</option><option value="true">Pagó</option><option value="false">No pagó</option></select></div>
-        <div class="form-group"><label for="filtroZonaAdmin">Zona</label><select id="filtroZonaAdmin"><option value="">Todas las zonas</option><option>San Marcos</option><option>Caucasia</option><option>Montelíbano</option><option>La Apartada</option><option>Buenavista</option></select></div>
-        <div class="form-group"><label for="filtroDesdeAdmin">Fecha desde</label><input id="filtroDesdeAdmin" type="date"></div><div class="form-group"><label for="filtroHastaAdmin">Fecha hasta</label><input id="filtroHastaAdmin" type="date"></div>
+        <div class="form-group"><label for="filtroDesdeAdmin">Fecha desde</label><input id="filtroDesdeAdmin" type="date"></div>
+        <div class="form-group"><label for="filtroHastaAdmin">Fecha hasta</label><input id="filtroHastaAdmin" type="date"></div>
       </div></div>
       <div class="card table-card"><div class="card-heading table-heading"><div><span class="section-kicker">RESUMEN</span><h3>Llamadas por asesor</h3><p class="muted">Una sola fila por asesor para consultar rápidamente contestadas, no contestadas y WhatsApp.</p></div><div class="table-tools"><span id="admin-result-count" class="result-count">0 resultados</span><button id="btn-preview-advisor-summary" class="btn-secondary" type="button">👁 Vista previa</button><button id="btn-print-advisor-summary" class="btn-primary" type="button">🖨 Imprimir</button><button id="btn-pdf-advisor-summary" class="btn-primary" type="button">📄 PDF</button><button id="btn-excel-advisor-summary" class="btn-secondary" type="button">📊 Excel</button></div></div><div class="table-wrapper"><table class="advisor-call-summary-table"><thead><tr><th>Asesor</th><th>Total</th><th>Contestadas</th><th>No contestadas</th><th>WhatsApp</th><th>Compromisos</th><th>Pagos</th><th>Zonas</th></tr></thead><tbody id="tabla-admin"></tbody></table></div></div>
 
