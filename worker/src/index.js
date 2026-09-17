@@ -5506,7 +5506,7 @@ var corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Max-Age": "86400"
 };
-var WORKER_VERSION = "survey-report-optimization-2026-09-17-v24";
+var WORKER_VERSION = "dashboard-admin-config-calls-fix-2026-09-17-v26";
 var jsonHeaders = {
   ...corsHeaders,
   "Content-Type": "application/json; charset=utf-8"
@@ -6348,7 +6348,7 @@ async function handleSurveys(request, env) {
 __name(handleSurveys,"handleSurveys");
 
 async function handleAdminDashboard(request, env) {
-  try { const auth=await requireAuth(request,env); if(!auth||String(auth.rol||"").toLowerCase()!=="administrador")return errorResponse("No autorizado",403); const u=new URL(request.url),from=u.searchParams.get("from")||"",to=u.searchParams.get("to")||""; if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to))return errorResponse("Periodo inválido",400); const sql=getDB(env); const advisors=await sql.query(`SELECT p.id,p.nombre,p.apellido,p.email,p.meta_mensual,p.activo,COUNT(l.id)::int AS total,COUNT(l.id) FILTER (WHERE l.llamada='Contestada')::int AS contestadas,COUNT(l.id) FILTER (WHERE l.llamada='No contestada')::int AS no_contestadas,COUNT(l.id) FILTER (WHERE l.llamada='Equivocada')::int AS equivocadas,COUNT(l.id) FILTER (WHERE l.compromiso_pago=true)::int AS compromisos,COUNT(l.id) FILTER (WHERE l.pago=true)::int AS pagos FROM perfilescr p LEFT JOIN llamadascr l ON l.asesor_id=p.id AND l.fecha_llamada >= $1 AND l.fecha_llamada < $2 WHERE p.rol='asesor' GROUP BY p.id ORDER BY p.nombre,p.apellido`,[from,to]); const totals=await sql.query(`SELECT COUNT(*)::int AS total,COUNT(*) FILTER (WHERE llamada='Contestada')::int AS contestadas,COUNT(*) FILTER (WHERE llamada='No contestada')::int AS no_contestadas,COUNT(*) FILTER (WHERE llamada='Equivocada')::int AS equivocadas,COUNT(*) FILTER (WHERE compromiso_pago=true)::int AS compromisos,COUNT(*) FILTER (WHERE pago=true)::int AS pagos FROM llamadascr WHERE fecha_llamada >= $1 AND fecha_llamada < $2`,[from,to]); const gr=await sql.query(`SELECT tipo_gestion,COUNT(*)::int AS total FROM llamadascr WHERE fecha_llamada >= $1 AND fecha_llamada < $2 GROUP BY tipo_gestion`,[from,to]); const gestion={};gr.forEach(x=>gestion[x.tipo_gestion||""]=Number(x.total||0));return json({ok:true,data:{advisors,totals:{...(totals[0]||{}),gestion}}}); }
+  try { const auth=await requireAuth(request,env); if(!auth||String(auth.rol||"").toLowerCase()!=="administrador")return errorResponse("No autorizado",403); const u=new URL(request.url),from=u.searchParams.get("from")||"",to=u.searchParams.get("to")||""; if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to))return errorResponse("Periodo inválido",400); const sql=getDB(env); const advisors=await sql.query(`SELECT p.id,p.nombre,p.apellido,p.email,p.meta_mensual,p.activo,COUNT(l.id)::int AS total,COUNT(l.id) FILTER (WHERE l.llamada='Contestada')::int AS contestadas,COUNT(l.id) FILTER (WHERE l.llamada='No contestada')::int AS no_contestadas,COUNT(l.id) FILTER (WHERE l.llamada='Equivocada')::int AS equivocadas,COUNT(l.id) FILTER (WHERE l.compromiso_pago=true)::int AS compromisos,COUNT(l.id) FILTER (WHERE l.pago=true)::int AS pagos FROM perfilescr p LEFT JOIN llamadascr l ON l.asesor_id=p.id AND l.fecha_llamada >= $1 AND l.fecha_llamada < $2 WHERE LOWER(p.rol) IN ('asesor','administrador') GROUP BY p.id ORDER BY p.nombre,p.apellido`,[from,to]); const totals=await sql.query(`SELECT COUNT(*)::int AS total,COUNT(*) FILTER (WHERE llamada='Contestada')::int AS contestadas,COUNT(*) FILTER (WHERE llamada='No contestada')::int AS no_contestadas,COUNT(*) FILTER (WHERE llamada='Equivocada')::int AS equivocadas,COUNT(*) FILTER (WHERE compromiso_pago=true)::int AS compromisos,COUNT(*) FILTER (WHERE pago=true)::int AS pagos FROM llamadascr WHERE fecha_llamada >= $1 AND fecha_llamada < $2`,[from,to]); const gr=await sql.query(`SELECT tipo_gestion,COUNT(*)::int AS total FROM llamadascr WHERE fecha_llamada >= $1 AND fecha_llamada < $2 GROUP BY tipo_gestion`,[from,to]); const gestion={};gr.forEach(x=>gestion[x.tipo_gestion||""]=Number(x.total||0));return json({ok:true,data:{advisors,totals:{...(totals[0]||{}),gestion}}}); }
   catch(error){console.error("ADMIN DASHBOARD ERROR:",error);return errorResponse("Error obteniendo dashboard mensual",500,error.message);}
 }
 __name(handleAdminDashboard,"handleAdminDashboard");
@@ -6358,6 +6358,33 @@ async function handleAdvisorDashboard(request, env) {
 }
 __name(handleAdvisorDashboard,"handleAdvisorDashboard");
 
+
+async function handleConfig(request, env) {
+  try {
+    const auth = await requireAuth(request, env);
+    if (!auth) return errorResponse("No autenticado", 401);
+    const sql = getDB(env);
+    if (request.method === "GET") {
+      const rows = await sql.query(`SELECT id,color_principal,logo_url,updated_by,updated_at FROM configuracioncr WHERE id = 1 LIMIT 1`);
+      return json({ ok: true, data: rows[0] || { id: 1, color_principal: "#0ea5e9", logo_url: "" } });
+    }
+    if (String(auth.rol || "").toLowerCase() !== "administrador") return errorResponse("No autorizado", 403);
+    const body = await request.json();
+    const color = typeof body?.color_principal === "string" && body.color_principal.trim() ? body.color_principal.trim() : "#0ea5e9";
+    const logo = typeof body?.logo_url === "string" ? body.logo_url : "";
+    const rows = await sql.query(`
+      INSERT INTO configuracioncr (id,color_principal,logo_url,updated_by,updated_at)
+      VALUES (1,$1,$2,$3,NOW())
+      ON CONFLICT (id) DO UPDATE SET color_principal=EXCLUDED.color_principal,logo_url=EXCLUDED.logo_url,updated_by=EXCLUDED.updated_by,updated_at=NOW()
+      RETURNING id,color_principal,logo_url,updated_by,updated_at
+    `,[color,logo,auth.sub]);
+    return json({ ok: true, data: rows[0] });
+  } catch (error) {
+    console.error("CONFIG ERROR:", error);
+    return errorResponse("Error guardando configuración", 500, error.message);
+  }
+}
+__name(handleConfig,"handleConfig");
 async function handleGetTable(request, env, table) {
   try {
     if (!ALLOWED_TABLES.has(table)) {
@@ -6635,6 +6662,7 @@ async function router(request, env) {
   if (pathname === "/api/surveys" && method === "GET") return await handleSurveys(request, env);
   if (pathname === "/api/dashboard/admin" && method === "GET") return await handleAdminDashboard(request, env);
   if (pathname === "/api/dashboard/advisor" && method === "GET") return await handleAdvisorDashboard(request, env);
+  if (pathname === "/api/config" && (method === "GET" || method === "PUT")) return await handleConfig(request, env);
   if (pathname === "/api/admin/users" && method === "GET") {
     return await handleUsers(request, env);
   }
